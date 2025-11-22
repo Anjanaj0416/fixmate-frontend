@@ -1,0 +1,201 @@
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import PrivateRoute from './PrivateRoute';
+import RoleBasedRoute from './RoleBasedRoute';
+import { USER_ROLES } from '../utils/constants';
+
+// Import pages
+// Main pages
+import Home from '../pages/Home';
+import Login from '../pages/Login';
+import Signup from '../pages/Signup';
+import ForgotPassword from '../pages/ForgotPassword';
+import NotFound from '../pages/NotFound';
+
+// Customer pages
+import CustomerDashboard from '../pages/customer/CustomerDashboard';
+import FindWorkers from '../pages/customer/FindWorkers';
+import WorkerProfile from '../pages/customer/WorkerProfile';
+import MyBookings from '../pages/customer/MyBookings';
+import Favorites from '../pages/customer/Favorites';
+import CustomerProfile from '../pages/customer/Profile';
+
+// Worker pages
+import WorkerDashboard from '../pages/worker/WorkerDashboard';
+import MyJobs from '../pages/worker/MyJobs';
+import Earnings from '../pages/worker/Earnings';
+import WorkerProfilePage from '../pages/worker/WorkerProfile';
+
+// Admin pages
+import AdminPanel from '../pages/admin/AdminPanel';
+import Users from '../pages/admin/Users';
+import Reports from '../pages/admin/Reports';
+import Settings from '../pages/admin/Settings';
+
+/**
+ * App Routes Component
+ * Defines all application routes with proper authentication and role-based access
+ */
+const AppRoutes = () => {
+  return (
+    <Routes>
+      {/* Public Routes */}
+      <Route path="/" element={<Home />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+
+      {/* Customer Routes */}
+      <Route
+        path="/customer/dashboard"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <CustomerDashboard />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/customer/find-workers"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <FindWorkers />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/customer/worker/:id"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <WorkerProfile />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/customer/bookings"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <MyBookings />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/customer/favorites"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <Favorites />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/customer/profile"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <CustomerProfile />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Worker Routes */}
+      <Route
+        path="/worker/dashboard"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerDashboard />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/worker/jobs"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <MyJobs />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/worker/earnings"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <Earnings />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/worker/profile"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerProfilePage />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Admin Routes */}
+      <Route
+        path="/admin"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.ADMIN]}>
+              <AdminPanel />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/users"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.ADMIN]}>
+              <Users />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.ADMIN]}>
+              <Reports />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/settings"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.ADMIN]}>
+              <Settings />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Fallback Routes */}
+      <Route path="/404" element={<NotFound />} />
+      <Route path="*" element={<Navigate to="/404" replace />} />
+    </Routes>
+  );
+};
+
+export default AppRoutes;
