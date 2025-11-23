@@ -1,18 +1,18 @@
-// Firebase Configuration
+// Firebase Configuration for Vite
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 // Your Firebase configuration
-// Replace with your actual Firebase config from Firebase Console
+// Vite uses import.meta.env instead of process.env
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY",
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || "fixamte-df879.firebaseapp.com",
-  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID || "fixamte-df879",
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET || "fixamte-df879.appspot.com",
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "YOUR_SENDER_ID",
-  appId: process.env.REACT_APP_FIREBASE_APP_ID || "YOUR_APP_ID",
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID || "YOUR_MEASUREMENT_ID"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "fixamte-df879.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "fixamte-df879",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "fixamte-df879.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789012",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789012:web:abcdef1234567890",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-XXXXXXXXXX"
 };
 
 // Initialize Firebase
@@ -58,9 +58,13 @@ export const requestNotificationPermission = async () => {
       console.log('Notification permission granted');
       
       // Get FCM token
-      const token = await getToken(messaging, {
-        vapidKey: process.env.REACT_APP_FIREBASE_VAPID_KEY || 'YOUR_VAPID_KEY'
-      });
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+      if (!vapidKey) {
+        console.warn('VAPID key not configured');
+        return null;
+      }
+
+      const token = await getToken(messaging, { vapidKey });
       
       if (token) {
         console.log('FCM Token:', token);
@@ -69,8 +73,11 @@ export const requestNotificationPermission = async () => {
         console.log('No registration token available');
         return null;
       }
-    } else {
+    } else if (permission === 'denied') {
       console.log('Notification permission denied');
+      return null;
+    } else {
+      console.log('Notification permission dismissed');
       return null;
     }
   } catch (error) {
@@ -81,7 +88,7 @@ export const requestNotificationPermission = async () => {
 
 /**
  * Listen for foreground messages
- * @param {Function} callback - Callback function to handle messages
+ * @param {Function} callback - Function to call when message is received
  */
 export const onMessageListener = (callback) => {
   if (!messaging) {
@@ -90,29 +97,11 @@ export const onMessageListener = (callback) => {
   }
 
   return onMessage(messaging, (payload) => {
-    console.log('Message received in foreground:', payload);
-    callback(payload);
-  });
-};
-
-/**
- * Delete FCM token
- * @returns {Promise<boolean>} Success status
- */
-export const deleteToken = async () => {
-  try {
-    if (!messaging) {
-      return false;
+    console.log('Message received:', payload);
+    if (callback) {
+      callback(payload);
     }
-    
-    const { deleteToken: deleteTokenFn } = await import('firebase/messaging');
-    await deleteTokenFn(messaging);
-    console.log('Token deleted successfully');
-    return true;
-  } catch (error) {
-    console.error('Error deleting token:', error);
-    return false;
-  }
+  });
 };
 
 export default app;
