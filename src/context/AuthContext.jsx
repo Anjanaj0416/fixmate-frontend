@@ -23,8 +23,10 @@ export const AuthContext = createContext();
 /**
  * Auth Provider Component
  * Manages authentication state and operations
+ * 
+ * ⭐ Changed to named function export for Fast Refresh compatibility
  */
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -313,6 +315,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
+// Default export for convenience
 export default AuthContext;

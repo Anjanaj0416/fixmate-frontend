@@ -6,14 +6,20 @@ import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 // Your Firebase configuration
 // Vite uses import.meta.env instead of process.env
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "fixamte-df879.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "fixamte-df879",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "fixamte-df879.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "123456789012",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:123456789012:web:abcdef1234567890",
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-XXXXXXXXXX"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
+// Validate configuration
+if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes('xxxx')) {
+  console.error('Firebase configuration error: Invalid API key');
+  console.error('Please check your .env file and make sure all VITE_FIREBASE_* variables are set correctly');
+}
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);

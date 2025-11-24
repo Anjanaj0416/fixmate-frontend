@@ -8,7 +8,9 @@ import { USER_ROLES } from '../utils/constants';
 // Main pages
 import Home from '../pages/Home';
 import Login from '../pages/Login';
-import Signup from '../pages/Signup';
+import BasicInfoRegistration from '../pages/BasicInfoRegistration';
+import AccountTypeSelection from '../pages/AccountTypeSelection';
+import WorkerRegistrationFlow from '../pages/WorkerRegistrationFlow';
 import ForgotPassword from '../pages/ForgotPassword';
 import NotFound from '../pages/NotFound';
 
@@ -42,7 +44,9 @@ const AppRoutes = () => {
       {/* Public Routes */}
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/signup" element={<BasicInfoRegistration />} />
+      <Route path="/select-account-type" element={<AccountTypeSelection />} />
+      <Route path="/worker-registration" element={<WorkerRegistrationFlow />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Customer Routes */}
@@ -67,7 +71,7 @@ const AppRoutes = () => {
         }
       />
       <Route
-        path="/customer/worker/:id"
+        path="/customer/worker/:workerId"
         element={
           <PrivateRoute>
             <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
@@ -191,9 +195,8 @@ const AppRoutes = () => {
         }
       />
 
-      {/* Fallback Routes */}
-      <Route path="/404" element={<NotFound />} />
-      <Route path="*" element={<Navigate to="/404" replace />} />
+      {/* Catch all - 404 */}
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 };

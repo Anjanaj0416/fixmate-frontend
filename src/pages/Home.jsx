@@ -124,17 +124,10 @@ const Home = () => {
               
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button
-                  onClick={() => navigate('/signup')}
+                  onClick={() => navigate('/login')}
                   className="bg-white text-indigo-600 hover:bg-gray-100 px-8 py-4 text-lg font-semibold rounded-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all"
                 >
                   Get Started <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-                <Button
-                  onClick={() => navigate('/signup?role=worker')}
-                  variant="outline"
-                  className="border-2 border-white text-white hover:bg-white hover:text-indigo-600 px-8 py-4 text-lg font-semibold rounded-lg"
-                >
-                  Join as Worker
                 </Button>
               </div>
 
@@ -187,7 +180,7 @@ const Home = () => {
             {services.map((service, index) => (
               <div
                 key={index}
-                onClick={() => navigate('/signup')}
+                onClick={() => navigate('/login')}
                 className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl p-6 hover:shadow-xl transition-all cursor-pointer transform hover:scale-105 border border-gray-200"
               >
                 <div className="text-4xl mb-3">{service.icon}</div>
@@ -203,7 +196,7 @@ const Home = () => {
 
           <div className="text-center mt-10">
             <Button
-              onClick={() => navigate('/signup')}
+              onClick={() => navigate('/login')}
               variant="outline"
               className="border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-600 hover:text-white px-8 py-3"
             >
@@ -292,7 +285,7 @@ const Home = () => {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
-              onClick={() => navigate('/signup')}
+              onClick={() => navigate('/login')}
               className="bg-white text-indigo-600 hover:bg-gray-100 px-10 py-4 text-lg font-semibold rounded-lg shadow-xl hover:shadow-2xl transform hover:scale-105 transition-all"
             >
               Find Workers Now
