@@ -24,7 +24,8 @@ export const AuthContext = createContext();
  * Auth Provider Component
  * Manages authentication state and operations
  * 
- * ⭐ Changed to named function export for Fast Refresh compatibility
+ * FIXED: Changed to named function export for Fast Refresh compatibility
+ * FIXED: Changed verifyToken to verifyTokenWithBackend
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -42,8 +43,8 @@ export function AuthProvider({ children }) {
         const savedUser = getUserData();
 
         if (token && savedUser) {
-          // Verify token is still valid
-          const response = await authService.verifyToken();
+          // Verify token is still valid using correct method name
+          const response = await authService.verifyTokenWithBackend(token); // FIXED: was verifyToken
           if (response.success) {
             setUser(savedUser);
           } else {
@@ -66,6 +67,7 @@ export function AuthProvider({ children }) {
 
   /**
    * Listen to Firebase auth state changes
+   * FIXED: Changed verifyToken to verifyTokenWithBackend
    */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -76,16 +78,21 @@ export function AuthProvider({ children }) {
         // This happens with Google Sign-In
         try {
           const idToken = await firebaseUser.getIdToken();
-          const response = await authService.verifyToken(idToken);
+          const response = await authService.verifyTokenWithBackend(idToken); // FIXED: was verifyToken
           
           if (response.success) {
-            setUser(response.user);
-            setUserData(response.user);
+            setUser(response.user || response.data?.user);
+            setUserData(response.user || response.data?.user);
             setAuthToken(idToken);
           }
         } catch (error) {
           console.error('Error syncing Firebase user:', error);
         }
+      } else if (!firebaseUser && user) {
+        // User signed out from Firebase
+        setUser(null);
+        removeAuthToken();
+        removeUserData();
       }
     });
 
@@ -104,52 +111,32 @@ export function AuthProvider({ children }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const idToken = await userCredential.user.getIdToken();
 
-      // Authenticate with backend
-      const response = await authService.login(email, password, idToken);
+      // Authenticate with backend (using authService.signIn which internally calls the API)
+      const response = await authService.signIn(email, password);
 
-      if (response.success) {
-        setUser(response.user);
-        setUserData(response.user);
-        setAuthToken(response.token);
+      if (response.user) {
+        setUser(response.user || response.backendUser);
+        setUserData(response.user || response.backendUser);
+        setAuthToken(idToken);
 
         // Request notification permission
-        const fcmToken = await requestNotificationPermission();
-        if (fcmToken) {
-          await authService.updateFCMToken(fcmToken);
+        try {
+          const fcmToken = await requestNotificationPermission();
+          if (fcmToken) {
+            await authService.updateFCMToken(fcmToken);
+          }
+        } catch (fcmError) {
+          console.warn('FCM token registration failed:', fcmError);
         }
 
-        return { success: true, user: response.user };
+        return { success: true, user: response.user || response.backendUser };
       } else {
         throw new Error(response.message || 'Login failed');
       }
     } catch (error) {
-      setError(error.message);
-      return { success: false, message: error.message };
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Register new user
-   */
-  const register = async (userData) => {
-    try {
-      setError(null);
-      setLoading(true);
-
-      const response = await authService.register(userData);
-
-      if (response.success) {
-        // Automatically log in after registration
-        await login(userData.email, userData.password);
-        return { success: true, user: response.user };
-      } else {
-        throw new Error(response.message || 'Registration failed');
-      }
-    } catch (error) {
-      setError(error.message);
-      return { success: false, message: error.message };
+      const errorMessage = error.message || 'Login failed';
+      setError(errorMessage);
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -163,139 +150,100 @@ export function AuthProvider({ children }) {
       setError(null);
       setLoading(true);
 
-      // Sign in with Google popup
-      const userCredential = await signInWithPopup(auth, googleProvider);
-      const idToken = await userCredential.user.getIdToken();
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
 
-      // Authenticate with backend
-      const response = await authService.googleLogin(idToken);
+      // Check if user exists in backend
+      const response = await authService.verifyTokenWithBackend(idToken); // FIXED: was verifyToken
 
-      if (response.success) {
+      if (response.success && response.user) {
         setUser(response.user);
         setUserData(response.user);
-        setAuthToken(response.token);
-
-        // Request notification permission
-        const fcmToken = await requestNotificationPermission();
-        if (fcmToken) {
-          await authService.updateFCMToken(fcmToken);
-        }
+        setAuthToken(idToken);
 
         return { success: true, user: response.user };
       } else {
-        throw new Error(response.message || 'Google login failed');
+        // New user, needs to complete registration
+        return { 
+          success: false, 
+          needsRegistration: true, 
+          firebaseUser: result.user,
+          idToken 
+        };
       }
     } catch (error) {
-      setError(error.message);
-      return { success: false, message: error.message };
+      const errorMessage = error.message || 'Google login failed';
+      setError(errorMessage);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
   /**
-   * Logout user
+   * Logout
    */
   const logout = async () => {
     try {
       setLoading(true);
-
-      // Sign out from Firebase
       await signOut(auth);
-
-      // Notify backend
-      await authService.logout();
-
-      // Clear local state and storage
       setUser(null);
       setFirebaseUser(null);
       removeAuthToken();
       removeUserData();
-
       return { success: true };
     } catch (error) {
-      console.error('Error logging out:', error);
-      // Clear state anyway
-      setUser(null);
-      setFirebaseUser(null);
-      removeAuthToken();
-      removeUserData();
-      return { success: false, message: error.message };
+      const errorMessage = error.message || 'Logout failed';
+      setError(errorMessage);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
   /**
-   * Send password reset email
+   * Reset password
    */
   const resetPassword = async (email) => {
     try {
       setError(null);
       setLoading(true);
-
       await sendPasswordResetEmail(auth, email);
       return { success: true, message: 'Password reset email sent' };
     } catch (error) {
-      setError(error.message);
-      return { success: false, message: error.message };
+      const errorMessage = error.message || 'Password reset failed';
+      setError(errorMessage);
+      throw error;
     } finally {
       setLoading(false);
     }
   };
 
   /**
-   * Update user profile
+   * Update user data
    */
-  const updateUser = useCallback((updatedData) => {
-    setUser((prevUser) => ({
-      ...prevUser,
-      ...updatedData,
-    }));
-    setUserData({
-      ...user,
-      ...updatedData,
-    });
-  }, [user]);
+  const updateUser = useCallback((userData) => {
+    setUser(userData);
+    setUserData(userData);
+  }, []);
 
   /**
    * Refresh user data from backend
    */
   const refreshUser = async () => {
     try {
-      const response = await authService.getCurrentUser();
-      if (response.success) {
+      const token = getAuthToken();
+      if (!token) return;
+
+      const response = await authService.verifyTokenWithBackend(token); // FIXED: was verifyToken
+      if (response.success && response.user) {
         setUser(response.user);
         setUserData(response.user);
-        return { success: true, user: response.user };
       }
-      return { success: false };
     } catch (error) {
       console.error('Error refreshing user:', error);
-      return { success: false, message: error.message };
     }
   };
-
-  /**
-   * Check if user is authenticated
-   */
-  const isAuthenticated = useCallback(() => {
-    return !!user && !!getAuthToken();
-  }, [user]);
-
-  /**
-   * Check if user has specific role
-   */
-  const hasRole = useCallback((role) => {
-    return user?.role === role;
-  }, [user]);
-
-  /**
-   * Check if user has any of the specified roles
-   */
-  const hasAnyRole = useCallback((roles) => {
-    return roles.includes(user?.role);
-  }, [user]);
 
   const value = {
     user,
@@ -303,19 +251,16 @@ export function AuthProvider({ children }) {
     loading,
     error,
     login,
-    register,
     loginWithGoogle,
     logout,
     resetPassword,
     updateUser,
     refreshUser,
-    isAuthenticated,
-    hasRole,
-    hasAnyRole,
+    isAuthenticated: !!user,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-// Default export for convenience
-export default AuthContext;
+// Default export for backwards compatibility
+export default AuthProvider;

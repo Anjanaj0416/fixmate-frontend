@@ -1,114 +1,181 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Wrench, ArrowRight } from 'lucide-react';
-import Button from '../components/common/Button';
+import { Users, Wrench, ArrowRight, CheckCircle } from 'lucide-react';
+import { Button } from '../components/common';
 
+/**
+ * Account Type Selection Component
+ * Allows users to choose between Customer and Worker roles
+ * FIXED: Proper backend registration with correct API endpoint
+ */
 const AccountTypeSelection = () => {
   const navigate = useNavigate();
+  const [selectedRole, setSelectedRole] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [tempUserData, setTempUserData] = useState(null);
 
   useEffect(() => {
-    // Retrieve temporary user data from sessionStorage
+    // Get temporary user data from session storage
     const data = sessionStorage.getItem('tempUserData');
-    if (data) {
-      try {
-        setTempUserData(JSON.parse(data));
-      } catch (error) {
-        console.error('Error parsing temp user data:', error);
-        navigate('/signup');
-      }
-    } else {
+    
+    if (!data) {
       // No temp data, redirect to signup
-      navigate('/signup');
-    }
-  }, [navigate]);
-
-  const handleCustomerSelection = async () => {
-    if (!tempUserData) {
-      alert('Session expired. Please sign up again.');
       navigate('/signup');
       return;
     }
 
+    try {
+      const parsedData = JSON.parse(data);
+      setTempUserData(parsedData);
+      
+      // Log for debugging
+      console.log('📋 Temp user data loaded:', {
+        email: parsedData.email,
+        hasToken: !!parsedData.idToken,
+        hasFirebaseUid: !!parsedData.firebaseUid
+      });
+    } catch (err) {
+      console.error('Error parsing temp user data:', err);
+      setError('Invalid registration data. Please start again.');
+      setTimeout(() => navigate('/signup'), 3000);
+    }
+  }, [navigate]);
+
+  const accountTypes = [
+    {
+      id: 'customer',
+      title: 'I Need Services',
+      description: 'Find and hire skilled professionals for your home repairs and improvements',
+      icon: Users,
+      features: [
+        'Browse skilled workers',
+        'Book services instantly',
+        'Track job progress',
+        'Rate and review workers'
+      ],
+      color: 'indigo'
+    },
+    {
+      id: 'worker',
+      title: 'I Provide Services',
+      description: 'Offer your skills and connect with customers who need your expertise',
+      icon: Wrench,
+      features: [
+        'Create professional profile',
+        'Receive job requests',
+        'Manage your schedule',
+        'Grow your business'
+      ],
+      color: 'green'
+    }
+  ];
+
+  const handleRoleSelection = (role) => {
+    setSelectedRole(role);
+    setError('');
+  };
+
+  const handleContinue = async () => {
+    if (!selectedRole) {
+      setError('Please select an account type');
+      return;
+    }
+
+    if (!tempUserData) {
+      setError('Registration data not found. Please start registration again.');
+      return;
+    }
+
     setLoading(true);
+    setError('');
 
     try {
-      // Get API URL from environment variables
-      // Support both VITE_API_URL and VITE_API_BASE_URL
-      const apiBaseUrl = import.meta.env.VITE_API_URL || 
-                         import.meta.env.VITE_API_BASE_URL?.replace('/api/v1', '') ||
-                         'http://localhost:5001';
-      
-      const apiUrl = `${apiBaseUrl}/api/v1/auth/signup`;
+      console.log('🚀 Starting backend registration...');
+      console.log('Selected role:', selectedRole);
+      console.log('API URL:', import.meta.env.VITE_API_URL);
 
-      console.log('Creating customer account at:', apiUrl);
-
-      // Create customer account
-      const customerData = {
-        firstName: tempUserData.firstName,
-        lastName: tempUserData.lastName,
-        name: tempUserData.name,
+      // Prepare registration data for backend
+      const registrationData = {
+        firebaseUid: tempUserData.firebaseUid,
         email: tempUserData.email,
+        fullName: tempUserData.name,
         phoneNumber: tempUserData.phoneNumber,
         address: tempUserData.address,
-        role: 'customer',
-        firebaseUid: tempUserData.firebaseUid
+        role: selectedRole,
       };
 
-      const response = await fetch(apiUrl, {
+      console.log('📤 Sending registration data:', {
+        ...registrationData,
+        hasToken: !!tempUserData.idToken
+      });
+
+      // Call backend API to create user in MongoDB
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const endpoint = `${apiUrl}/api/v1/auth/signup`;
+      
+      console.log('📍 API Endpoint:', endpoint);
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${tempUserData.idToken}`
         },
-        body: JSON.stringify(customerData)
+        body: JSON.stringify(registrationData)
       });
 
-      console.log('Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server response:', errorText);
-        throw new Error(`Server error: ${response.status} - ${errorText}`);
-      }
+      console.log('📥 Response status:', response.status);
 
       const data = await response.json();
-      console.log('Customer account created:', data);
+      console.log('📥 Response data:', data);
 
-      if (data.success || data.user) {
-        // Store auth token and user data
-        const authToken = data.token || tempUserData.idToken;
-        sessionStorage.setItem('authToken', authToken);
-        sessionStorage.setItem('user', JSON.stringify(data.user));
-        
-        // Clear temporary data
-        sessionStorage.removeItem('tempUserData');
-
-        // Show success message
-        alert('Customer account created successfully!');
-
-        // Redirect to customer dashboard
-        navigate('/customer/dashboard');
-      } else {
-        throw new Error(data.message || 'Failed to create customer account');
+      if (!response.ok) {
+        throw new Error(data.message || `Registration failed: ${response.status}`);
       }
-    } catch (error) {
-      console.error('Customer registration error:', error);
-      alert(`Failed to create customer account: ${error.message}`);
+
+      // Registration successful
+      console.log('✅ Registration successful!');
+      console.log('User created:', data.data?.user || data.user);
+
+      // Store auth token and user data
+      sessionStorage.setItem('authToken', tempUserData.idToken);
+      sessionStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
+
+      // Clear temporary data
+      sessionStorage.removeItem('tempUserData');
+
+      // Redirect based on role
+      if (selectedRole === 'customer') {
+        console.log('➡️ Redirecting to customer dashboard');
+        navigate('/customer/dashboard');
+      } else if (selectedRole === 'worker') {
+        console.log('➡️ Redirecting to worker registration flow');
+        navigate('/worker-registration');
+      }
+
+    } catch (err) {
+      console.error('❌ Registration error:', err);
+      
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (err.message.includes('Failed to fetch')) {
+        errorMessage = 'Cannot connect to server. Please check if the backend is running on port 5001.';
+      } else if (err.message.includes('already exists')) {
+        errorMessage = 'This account already exists. Please login instead.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleWorkerSelection = () => {
-    // Navigate to worker registration flow
-    navigate('/worker-registration');
-  };
-
   if (!tempUserData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
@@ -118,136 +185,150 @@ const AccountTypeSelection = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-3">
-            Welcome to FixMate!
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Choose Your Account Type
           </h1>
           <p className="text-lg text-gray-600">
-            How would you like to use FixMate?
+            Welcome, {tempUserData.name}! How would you like to use FixMate?
           </p>
         </div>
 
-        {/* Account Type Cards */}
-        <div className="grid md:grid-cols-2 gap-8">
-          {/* Customer Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-transparent hover:border-blue-500 transition-all duration-300 transform hover:scale-105">
-            <div className="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mb-6">
-              <Search className="w-8 h-8 text-blue-600" />
+        {/* Error Message */}
+        {error && (
+          <div className="max-w-2xl mx-auto mb-8">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
+              <p className="font-medium">Error</p>
+              <p className="text-sm mt-1">{error}</p>
             </div>
-            
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">
-              Looking for Services
-            </h2>
-            
-            <p className="text-gray-600 mb-6">
-              Find skilled professionals for your home repairs, maintenance, and improvement projects
-            </p>
-
-            <ul className="space-y-3 mb-8">
-              <li className="flex items-center text-gray-700">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                Find Workers
-              </li>
-              <li className="flex items-center text-gray-700">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                Get Quotes
-              </li>
-              <li className="flex items-center text-gray-700">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                Book Services
-              </li>
-            </ul>
-
-            <Button
-              onClick={handleCustomerSelection}
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 text-lg font-semibold rounded-lg flex items-center justify-center"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                  Setting up...
-                </>
-              ) : (
-                <>
-                  I Need Services
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </>
-              )}
-            </Button>
           </div>
+        )}
 
-          {/* Worker Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 border-2 border-transparent hover:border-orange-500 transition-all duration-300 transform hover:scale-105">
-            <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mb-6">
-              <Wrench className="w-8 h-8 text-orange-600" />
-            </div>
+        {/* Account Type Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          {accountTypes.map((type) => {
+            const Icon = type.icon;
+            const isSelected = selectedRole === type.id;
             
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">
-              Providing Services
-            </h2>
-            
-            <p className="text-gray-600 mb-6">
-              Offer your skills and grow your business by connecting with clients who need your expertise
-            </p>
+            return (
+              <div
+                key={type.id}
+                onClick={() => handleRoleSelection(type.id)}
+                className={`
+                  relative bg-white rounded-2xl shadow-lg p-8 cursor-pointer
+                  transition-all duration-300 transform hover:scale-105
+                  ${isSelected 
+                    ? `ring-4 ring-${type.color}-500 ring-opacity-50 shadow-2xl` 
+                    : 'hover:shadow-xl'
+                  }
+                `}
+              >
+                {/* Selection Indicator */}
+                {isSelected && (
+                  <div className="absolute top-4 right-4">
+                    <CheckCircle className={`h-8 w-8 text-${type.color}-600`} />
+                  </div>
+                )}
 
-            <ul className="space-y-3 mb-8">
-              <li className="flex items-center text-gray-700">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                {/* Icon */}
+                <div className={`
+                  inline-flex items-center justify-center w-16 h-16 rounded-full mb-6
+                  ${isSelected 
+                    ? `bg-${type.color}-100` 
+                    : 'bg-gray-100'
+                  }
+                `}>
+                  <Icon className={`
+                    h-8 w-8 
+                    ${isSelected 
+                      ? `text-${type.color}-600` 
+                      : 'text-gray-600'
+                    }
+                  `} />
                 </div>
-                Get Clients
-              </li>
-              <li className="flex items-center text-gray-700">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                Send Quotes
-              </li>
-              <li className="flex items-center text-gray-700">
-                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center mr-3">
-                  <svg className="w-3 h-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                Earn More
-              </li>
-            </ul>
 
-            <Button
-              onClick={handleWorkerSelection}
-              disabled={loading}
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white py-4 text-lg font-semibold rounded-lg flex items-center justify-center"
+                {/* Title */}
+                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                  {type.title}
+                </h3>
+
+                {/* Description */}
+                <p className="text-gray-600 mb-6">
+                  {type.description}
+                </p>
+
+                {/* Features */}
+                <ul className="space-y-3">
+                  {type.features.map((feature, index) => (
+                    <li key={index} className="flex items-start">
+                      <CheckCircle className={`
+                        h-5 w-5 mr-3 mt-0.5 flex-shrink-0
+                        ${isSelected 
+                          ? `text-${type.color}-600` 
+                          : 'text-gray-400'
+                        }
+                      `} />
+                      <span className="text-gray-700">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Select Button */}
+                <div className="mt-8">
+                  <Button
+                    variant={isSelected ? 'primary' : 'outline'}
+                    fullWidth
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRoleSelection(type.id);
+                    }}
+                  >
+                    {isSelected ? 'Selected' : 'Select'}
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Continue Button */}
+        <div className="max-w-md mx-auto">
+          <Button
+            onClick={handleContinue}
+            disabled={!selectedRole || loading}
+            fullWidth
+            size="lg"
+            icon={<ArrowRight className="h-5 w-5" />}
+            iconPosition="right"
+          >
+            {loading ? 'Creating Account...' : 'Continue'}
+          </Button>
+
+          {/* Back to Signup */}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => navigate('/signup')}
+              className="text-sm text-indigo-600 hover:text-indigo-700 hover:underline"
             >
-              I Provide Services
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
+              ← Back to Registration
+            </button>
           </div>
         </div>
 
-        {/* Footer Note */}
-        <p className="text-center text-gray-500 mt-8 text-sm">
-          You can always switch your account type later from your profile settings
-        </p>
+        {/* Debug Info (remove in production) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div className="mt-8 p-4 bg-gray-100 rounded-lg text-xs font-mono max-w-2xl mx-auto">
+            <div className="font-bold mb-2">Debug Info:</div>
+            <div>Email: {tempUserData.email}</div>
+            <div>Has Token: {tempUserData.idToken ? 'Yes' : 'No'}</div>
+            <div>Has Firebase UID: {tempUserData.firebaseUid ? 'Yes' : 'No'}</div>
+            <div>API URL: {import.meta.env.VITE_API_URL || 'Not set'}</div>
+            <div>Selected Role: {selectedRole || 'None'}</div>
+          </div>
+        )}
       </div>
     </div>
   );
