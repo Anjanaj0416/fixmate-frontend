@@ -1,18 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { Input, Button } from '../common';
+import { AuthContext } from '../../context/AuthContext';  // ← FIXED: Up 2 levels
 
 /**
  * Login Form Component
  * Handles user login with email and password
  * 
- * FIXED: Send firebaseUid (not email) to backend login endpoint
+ * COMPLETE FIX: 
+ * - Send firebaseUid to backend
+ * - Update AuthContext before navigation
+ * - Use window.location for guaranteed navigation
  */
 const LoginForm = ({ onSuccess, onError }) => {
   const navigate = useNavigate();
   const auth = getAuth();
+  const { updateUser } = useContext(AuthContext);
 
   const [formData, setFormData] = useState({
     email: '',
@@ -96,7 +101,7 @@ const LoginForm = ({ onSuccess, onError }) => {
 
       // ✅ CRITICAL FIX: Backend expects firebaseUid, not email!
       const requestBody = {
-        firebaseUid: userCredential.user.uid,  // ← This is what backend needs!
+        firebaseUid: userCredential.user.uid,
       };
 
       console.log('📤 Request body:', requestBody);
@@ -122,7 +127,6 @@ const LoginForm = ({ onSuccess, onError }) => {
       console.log('✅ Response data:', data);
 
       // ✅ Extract user data from response
-      // Backend structure: { success: true, message: 'Login successful', data: { user: {...} } }
       const userData = data.data?.user || data.user || data.data || data;
       
       if (!userData || !userData.role) {
@@ -135,42 +139,69 @@ const LoginForm = ({ onSuccess, onError }) => {
       console.log('👤 User data:', userData);
       console.log('🎭 User role:', userRole);
 
-      // Store user data
-      const storageData = {
-        ...userData,
-        token: idToken,
-      };
-
+      // ✅ CRITICAL: Store auth data BEFORE navigation
+      // ALWAYS store in localStorage (PrivateRoute checks this)
+      localStorage.setItem('fixmate_auth_token', idToken);
+      localStorage.setItem('fixmate_user', JSON.stringify(userData));
+      
       if (rememberMe) {
-        localStorage.setItem('fixmate_auth_token', idToken);
-        localStorage.setItem('fixmate_user', JSON.stringify(userData));
+        localStorage.setItem('fixmate_remember', 'true');
       } else {
         sessionStorage.setItem('fixmate_auth_token', idToken);
         sessionStorage.setItem('fixmate_user', JSON.stringify(userData));
       }
 
-      console.log('✅ Login successful!');
+      console.log('💾 User data stored in localStorage');
 
-      // Call success callback
+      // ✅ CRITICAL: Update AuthContext BEFORE navigation
+      if (updateUser) {
+        console.log('🔄 Updating AuthContext with user data...');
+        updateUser(userData);
+        console.log('✅ AuthContext updated');
+      }
+
+      // ✅ Call success callback
       if (onSuccess) {
         onSuccess(userData);
       }
 
-      // ✅ Navigate based on user role
+      console.log('✅ Login successful!');
+
+      // ✅ Small delay to ensure state updates complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // ✅ Navigate based on user role with fallback
       console.log('🧭 Navigating based on role:', userRole);
       
       if (userRole === 'customer') {
         console.log('→ Redirecting to customer dashboard');
-        navigate('/customer/dashboard');
+        navigate('/customer/dashboard', { replace: true });
+        // Fallback if React Router fails
+        setTimeout(() => {
+          if (window.location.pathname === '/login') {
+            console.log('🚨 React Router failed, using window.location');
+            window.location.href = '/customer/dashboard';
+          }
+        }, 500);
       } else if (userRole === 'worker') {
         console.log('→ Redirecting to worker dashboard');
-        navigate('/worker/dashboard');
+        navigate('/worker/dashboard', { replace: true });
+        setTimeout(() => {
+          if (window.location.pathname === '/login') {
+            window.location.href = '/worker/dashboard';
+          }
+        }, 500);
       } else if (userRole === 'admin') {
         console.log('→ Redirecting to admin panel');
-        navigate('/admin/panel');
+        navigate('/admin', { replace: true });
+        setTimeout(() => {
+          if (window.location.pathname === '/login') {
+            window.location.href = '/admin';
+          }
+        }, 500);
       } else {
         console.log('⚠️ Unknown role, redirecting to home');
-        navigate('/');
+        navigate('/', { replace: true });
       }
     } catch (error) {
       console.error('❌ Login error:', error);

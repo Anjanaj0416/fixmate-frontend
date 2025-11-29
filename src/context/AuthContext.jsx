@@ -8,14 +8,6 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, requestNotificationPermission } from '../config/firebase';
 import authService from '../services/authService';
-import { 
-  getAuthToken, 
-  setAuthToken, 
-  removeAuthToken,
-  getUserData,
-  setUserData,
-  removeUserData,
-} from '../utils/helpers';
 
 // Create Context
 export const AuthContext = createContext();
@@ -24,8 +16,8 @@ export const AuthContext = createContext();
  * Auth Provider Component
  * Manages authentication state and operations
  * 
- * FIXED: Changed to named function export for Fast Refresh compatibility
- * FIXED: Changed verifyToken to verifyTokenWithBackend
+ * FIXED: Immediate state updates for navigation
+ * FIXED: Proper localStorage/sessionStorage handling
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -39,24 +31,49 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const token = getAuthToken();
-        const savedUser = getUserData();
+        // Check both localStorage and sessionStorage
+        const token = localStorage.getItem('fixmate_auth_token') || 
+                     sessionStorage.getItem('fixmate_auth_token');
+        const userDataStr = localStorage.getItem('fixmate_user') || 
+                           sessionStorage.getItem('fixmate_user');
 
-        if (token && savedUser) {
-          // Verify token is still valid using correct method name
-          const response = await authService.verifyTokenWithBackend(token); // FIXED: was verifyToken
-          if (response.success) {
+        console.log('🔍 Initializing auth...');
+        console.log('Token found:', !!token);
+        console.log('User data found:', !!userDataStr);
+
+        if (token && userDataStr) {
+          try {
+            const savedUser = JSON.parse(userDataStr);
+            console.log('✅ Loaded user from storage:', savedUser.email, 'Role:', savedUser.role);
+            
+            // Set user immediately
             setUser(savedUser);
-          } else {
-            // Token expired, clear storage
-            removeAuthToken();
-            removeUserData();
+            
+            // Verify token in background
+            authService.verifyTokenWithBackend(token)
+              .then(response => {
+                if (!response.success) {
+                  console.log('⚠️ Token invalid, clearing storage');
+                  localStorage.removeItem('fixmate_auth_token');
+                  localStorage.removeItem('fixmate_user');
+                  sessionStorage.removeItem('fixmate_auth_token');
+                  sessionStorage.removeItem('fixmate_user');
+                  setUser(null);
+                }
+              })
+              .catch(err => {
+                console.warn('Token verification failed:', err);
+              });
+          } catch (parseError) {
+            console.error('Error parsing user data:', parseError);
+            localStorage.removeItem('fixmate_user');
+            sessionStorage.removeItem('fixmate_user');
           }
+        } else {
+          console.log('ℹ️ No auth data found in storage');
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-        removeAuthToken();
-        removeUserData();
       } finally {
         setLoading(false);
       }
@@ -67,32 +84,36 @@ export function AuthProvider({ children }) {
 
   /**
    * Listen to Firebase auth state changes
-   * FIXED: Changed verifyToken to verifyTokenWithBackend
    */
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('🔥 Firebase auth state changed:', firebaseUser?.email || 'null');
       setFirebaseUser(firebaseUser);
       
       if (firebaseUser && !user) {
-        // User signed in with Firebase but not in our backend yet
-        // This happens with Google Sign-In
+        // User signed in with Firebase but not in our context yet
         try {
           const idToken = await firebaseUser.getIdToken();
-          const response = await authService.verifyTokenWithBackend(idToken); // FIXED: was verifyToken
+          const response = await authService.verifyTokenWithBackend(idToken);
           
           if (response.success) {
-            setUser(response.user || response.data?.user);
-            setUserData(response.user || response.data?.user);
-            setAuthToken(idToken);
+            const userData = response.user || response.data?.user;
+            console.log('✅ Synced Firebase user to context:', userData.email);
+            setUser(userData);
+            localStorage.setItem('fixmate_user', JSON.stringify(userData));
+            localStorage.setItem('fixmate_auth_token', idToken);
           }
         } catch (error) {
           console.error('Error syncing Firebase user:', error);
         }
       } else if (!firebaseUser && user) {
         // User signed out from Firebase
+        console.log('🚪 User signed out');
         setUser(null);
-        removeAuthToken();
-        removeUserData();
+        localStorage.removeItem('fixmate_auth_token');
+        localStorage.removeItem('fixmate_user');
+        sessionStorage.removeItem('fixmate_auth_token');
+        sessionStorage.removeItem('fixmate_user');
       }
     });
 
@@ -111,13 +132,14 @@ export function AuthProvider({ children }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const idToken = await userCredential.user.getIdToken();
 
-      // Authenticate with backend (using authService.signIn which internally calls the API)
+      // Authenticate with backend
       const response = await authService.signIn(email, password);
 
       if (response.user) {
-        setUser(response.user || response.backendUser);
-        setUserData(response.user || response.backendUser);
-        setAuthToken(idToken);
+        const userData = response.user || response.backendUser;
+        setUser(userData);
+        localStorage.setItem('fixmate_user', JSON.stringify(userData));
+        localStorage.setItem('fixmate_auth_token', idToken);
 
         // Request notification permission
         try {
@@ -129,7 +151,7 @@ export function AuthProvider({ children }) {
           console.warn('FCM token registration failed:', fcmError);
         }
 
-        return { success: true, user: response.user || response.backendUser };
+        return { success: true, user: userData };
       } else {
         throw new Error(response.message || 'Login failed');
       }
@@ -154,14 +176,15 @@ export function AuthProvider({ children }) {
       const idToken = await result.user.getIdToken();
 
       // Check if user exists in backend
-      const response = await authService.verifyTokenWithBackend(idToken); // FIXED: was verifyToken
+      const response = await authService.verifyTokenWithBackend(idToken);
 
       if (response.success && response.user) {
-        setUser(response.user);
-        setUserData(response.user);
-        setAuthToken(idToken);
+        const userData = response.user;
+        setUser(userData);
+        localStorage.setItem('fixmate_user', JSON.stringify(userData));
+        localStorage.setItem('fixmate_auth_token', idToken);
 
-        return { success: true, user: response.user };
+        return { success: true, user: userData };
       } else {
         // New user, needs to complete registration
         return { 
@@ -189,8 +212,10 @@ export function AuthProvider({ children }) {
       await signOut(auth);
       setUser(null);
       setFirebaseUser(null);
-      removeAuthToken();
-      removeUserData();
+      localStorage.removeItem('fixmate_auth_token');
+      localStorage.removeItem('fixmate_user');
+      sessionStorage.removeItem('fixmate_auth_token');
+      sessionStorage.removeItem('fixmate_user');
       return { success: true };
     } catch (error) {
       const errorMessage = error.message || 'Logout failed';
@@ -220,11 +245,13 @@ export function AuthProvider({ children }) {
   };
 
   /**
-   * Update user data
+   * Update user data - CRITICAL for login navigation
    */
   const updateUser = useCallback((userData) => {
+    console.log('🔄 updateUser called with:', userData.email, 'Role:', userData.role);
     setUser(userData);
-    setUserData(userData);
+    localStorage.setItem('fixmate_user', JSON.stringify(userData));
+    console.log('✅ User state and storage updated');
   }, []);
 
   /**
@@ -232,13 +259,15 @@ export function AuthProvider({ children }) {
    */
   const refreshUser = async () => {
     try {
-      const token = getAuthToken();
+      const token = localStorage.getItem('fixmate_auth_token') || 
+                   sessionStorage.getItem('fixmate_auth_token');
       if (!token) return;
 
-      const response = await authService.verifyTokenWithBackend(token); // FIXED: was verifyToken
+      const response = await authService.verifyTokenWithBackend(token);
       if (response.success && response.user) {
-        setUser(response.user);
-        setUserData(response.user);
+        const userData = response.user;
+        setUser(userData);
+        localStorage.setItem('fixmate_user', JSON.stringify(userData));
       }
     } catch (error) {
       console.error('Error refreshing user:', error);
@@ -256,11 +285,11 @@ export function AuthProvider({ children }) {
     resetPassword,
     updateUser,
     refreshUser,
-    isAuthenticated: !!user,
+    isAuthenticated: !!user, // Boolean, not a function!
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // Default export for backwards compatibility
-export default AuthProvider;
+export default AuthProvider;  
