@@ -7,6 +7,8 @@ import { Input, Button } from '../common';
 /**
  * Login Form Component
  * Handles user login with email and password
+ * 
+ * FIXED: Send firebaseUid (not email) to backend login endpoint
  */
 const LoginForm = ({ onSuccess, onError }) => {
   const navigate = useNavigate();
@@ -45,14 +47,12 @@ const LoginForm = ({ onSuccess, onError }) => {
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
+      newErrors.email = 'Invalid email address';
     }
 
     // Password validation
     if (!formData.password) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
     }
 
     setErrors(newErrors);
@@ -63,16 +63,19 @@ const LoginForm = ({ onSuccess, onError }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validate form
     if (!validateForm()) {
       return;
     }
 
     setLoading(true);
+    setErrors({});
 
     try {
-      console.log('🚀 Starting login...');
-      
-      // Sign in with Firebase
+      console.log('🔐 Starting login process...');
+
+      // Step 1: Sign in with Firebase
+      console.log('1️⃣ Authenticating with Firebase...');
       const userCredential = await signInWithEmailAndPassword(
         auth,
         formData.email,
@@ -80,79 +83,93 @@ const LoginForm = ({ onSuccess, onError }) => {
       );
 
       console.log('✅ Firebase authentication successful');
+      console.log('👤 Firebase UID:', userCredential.user.uid);
 
-      // Get ID token
+      // Step 2: Get Firebase ID token
+      console.log('2️⃣ Getting Firebase ID token...');
       const idToken = await userCredential.user.getIdToken();
       console.log('✅ ID token obtained');
 
-      // Use VITE environment variable
+      // Step 3: Verify with backend
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      console.log('🌐 API URL:', apiUrl);
+      console.log('3️⃣ Verifying with backend:', `${apiUrl}/api/v1/auth/login`);
 
-      // Call backend API to verify and get user data
+      // ✅ CRITICAL FIX: Backend expects firebaseUid, not email!
+      const requestBody = {
+        firebaseUid: userCredential.user.uid,  // ← This is what backend needs!
+      };
+
+      console.log('📤 Request body:', requestBody);
+
       const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${idToken}`,
+          Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({
-          firebaseUid: userCredential.user.uid,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
-      console.log('📨 Response status:', response.status);
-
-      const data = await response.json();
-      console.log('📦 Response data:', data);
+      console.log('✅ Response status:', response.status);
 
       if (!response.ok) {
-        throw new Error(data.message || 'Login failed');
+        const errorData = await response.json();
+        console.error('❌ Backend error:', errorData);
+        throw new Error(errorData.message || 'Login failed');
       }
 
-      // ✅ CRITICAL FIX: Extract user from correct location in response
-      // Backend sends: { success: true, message: '...', data: { user: {...} } }
-      const user = data.data?.user || data.user;
+      const data = await response.json();
+      console.log('✅ Response data:', data);
+
+      // ✅ Extract user data from response
+      // Backend structure: { success: true, message: 'Login successful', data: { user: {...} } }
+      const userData = data.data?.user || data.user || data.data || data;
       
-      if (!user) {
-        console.error('❌ No user data in response:', data);
-        throw new Error('Invalid response format - no user data');
+      if (!userData || !userData.role) {
+        console.error('❌ Invalid user data in response:', data);
+        throw new Error('Invalid response - missing user data');
       }
 
-      console.log('👤 User data:', user);
-      console.log('🎭 User role:', user.role);
+      const userRole = userData.role;
 
-      // Store token and user data
+      console.log('👤 User data:', userData);
+      console.log('🎭 User role:', userRole);
+
+      // Store user data
+      const storageData = {
+        ...userData,
+        token: idToken,
+      };
+
       if (rememberMe) {
-        localStorage.setItem('authToken', idToken);
-        localStorage.setItem('user', JSON.stringify(user));
+        localStorage.setItem('fixmate_auth_token', idToken);
+        localStorage.setItem('fixmate_user', JSON.stringify(userData));
       } else {
-        sessionStorage.setItem('authToken', idToken);
-        sessionStorage.setItem('user', JSON.stringify(user));
+        sessionStorage.setItem('fixmate_auth_token', idToken);
+        sessionStorage.setItem('fixmate_user', JSON.stringify(userData));
       }
 
       console.log('✅ Login successful!');
 
       // Call success callback
       if (onSuccess) {
-        onSuccess(user);
+        onSuccess(userData);
       }
 
-      // ✅ CRITICAL FIX: Navigate based on user role
-      const { role } = user;
-      console.log('🧭 Navigating based on role:', role);
+      // ✅ Navigate based on user role
+      console.log('🧭 Navigating based on role:', userRole);
       
-      if (role === 'customer') {
+      if (userRole === 'customer') {
         console.log('→ Redirecting to customer dashboard');
         navigate('/customer/dashboard');
-      } else if (role === 'worker') {
+      } else if (userRole === 'worker') {
         console.log('→ Redirecting to worker dashboard');
         navigate('/worker/dashboard');
-      } else if (role === 'admin') {
-        console.log('→ Redirecting to admin dashboard');
-        navigate('/admin/dashboard');
+      } else if (userRole === 'admin') {
+        console.log('→ Redirecting to admin panel');
+        navigate('/admin/panel');
       } else {
-        console.log('→ Unknown role, redirecting to home');
+        console.log('⚠️ Unknown role, redirecting to home');
         navigate('/');
       }
     } catch (error) {
@@ -190,127 +207,105 @@ const LoginForm = ({ onSuccess, onError }) => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
-      <div className="bg-white rounded-lg shadow-md p-8">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Sign in to your FixMate account
-          </p>
-        </div>
-
-        {/* Error Alert */}
-        {errors.submit && (
-          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
-            <div className="flex items-center">
-              <svg
-                className="h-5 w-5 text-red-500 mr-2"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <p className="text-sm text-red-700">{errors.submit}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email */}
-          <Input
-            label="Email Address"
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            error={errors.email}
-            placeholder="your.email@example.com"
-            required
-          />
-
-          {/* Password */}
-          <Input
-            label="Password"
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={handleChange}
-            error={errors.password}
-            placeholder="Enter your password"
-            required
-          />
-
-          {/* Remember Me & Forgot Password */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <input
-                id="remember-me"
-                name="remember-me"
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+    <div className="w-full">
+      {/* Error Alert */}
+      {errors.submit && (
+        <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
+          <div className="flex items-center">
+            <svg
+              className="h-5 w-5 text-red-500 mr-2"
+              fill="currentColor"
+              viewBox="0 0 20 20"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                clipRule="evenodd"
               />
-              <label
-                htmlFor="remember-me"
-                className="ml-2 block text-sm text-gray-900"
-              >
-                Remember me
-              </label>
-            </div>
-
-            <div className="text-sm">
-              <Link
-                to="/forgot-password"
-                className="font-medium text-indigo-600 hover:text-indigo-500"
-              >
-                Forgot password?
-              </Link>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <Button
-            type="submit"
-            variant="primary"
-            fullWidth
-            loading={loading}
-          >
-            Sign In
-          </Button>
-        </form>
-
-        {/* Divider */}
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">
-                Or continue with
-              </span>
-            </div>
+            </svg>
+            <p className="text-sm text-red-800">{errors.submit}</p>
           </div>
         </div>
+      )}
 
-        {/* Sign Up Link */}
-        <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
+      {/* Login Form */}
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Email Input */}
+        <Input
+          type="email"
+          name="email"
+          label="Email Address"
+          value={formData.email}
+          onChange={handleChange}
+          error={errors.email}
+          placeholder="Enter your email"
+          required
+          autoComplete="email"
+        />
+
+        {/* Password Input */}
+        <Input
+          type="password"
+          name="password"
+          label="Password"
+          value={formData.password}
+          onChange={handleChange}
+          error={errors.password}
+          placeholder="Enter your password"
+          required
+          autoComplete="current-password"
+        />
+
+        {/* Remember me & Forgot password */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <input
+              id="remember-me"
+              name="remember-me"
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+            />
+            <label
+              htmlFor="remember-me"
+              className="ml-2 block text-sm text-gray-900 cursor-pointer"
+            >
+              Remember me
+            </label>
+          </div>
+
+          <div className="text-sm">
             <Link
-              to="/signup"
+              to="/forgot-password"
               className="font-medium text-indigo-600 hover:text-indigo-500"
             >
-              Sign up
+              Forgot password?
             </Link>
-          </p>
+          </div>
+        </div>
+
+        {/* Submit Button */}
+        <Button
+          type="submit"
+          variant="primary"
+          fullWidth
+          loading={loading}
+          disabled={loading}
+        >
+          {loading ? 'Signing in...' : 'Sign In'}
+        </Button>
+      </form>
+
+      {/* Divider */}
+      <div className="mt-6">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">Or continue with</span>
+          </div>
         </div>
       </div>
     </div>
