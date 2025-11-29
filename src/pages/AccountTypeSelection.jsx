@@ -5,7 +5,7 @@ import { Button } from '../components/common';
 
 /**
  * Account Type Selection Component
- * CRITICAL FIX: Don't replace firebaseUid value with emoji in logs!
+ * ✅ FIXED: Workers navigate to registration flow FIRST, then register with complete data
  */
 function AccountTypeSelection() {
   const navigate = useNavigate();
@@ -26,10 +26,9 @@ function AccountTypeSelection() {
       const parsedData = JSON.parse(data);
       setTempUserData(parsedData);
       
-      // Log WITHOUT modifying the actual data
       console.log('✅ User data loaded');
       console.log('Email:', parsedData.email);
-      console.log('Firebase UID:', parsedData.firebaseUid); // Show actual UID
+      console.log('Firebase UID:', parsedData.firebaseUid);
       console.log('Has Token:', !!parsedData.idToken);
     } catch (err) {
       console.error('Error:', err);
@@ -73,24 +72,8 @@ function AccountTypeSelection() {
     setError('');
   };
 
-  const handleContinue = async () => {
-    if (!selectedRole) {
-      setError('Please select an account type');
-      return;
-    }
-
-    if (!tempUserData) {
-      setError('Registration data not found.');
-      return;
-    }
-
-    // ✅ CRITICAL: Check firebaseUid exists BEFORE sending
-    if (!tempUserData.firebaseUid) {
-      console.error('❌ Firebase UID is missing!');
-      setError('Firebase UID is missing. Please sign up again.');
-      return;
-    }
-
+  // ✅ NEW: Separate function for customer registration
+  const registerCustomer = async () => {
     setLoading(true);
     setError('');
 
@@ -98,30 +81,18 @@ function AccountTypeSelection() {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
       const endpoint = `${apiUrl}/api/v1/auth/signup`;
       
-      console.log('🚀 Starting registration...');
-      console.log('API:', endpoint);
-      console.log('Role:', selectedRole);
+      console.log('🚀 Registering customer...');
 
-      // ✅ CRITICAL FIX: Don't log objects that modify the data!
-      // Just send the actual values as-is
       const registrationData = {
-        firebaseUid: tempUserData.firebaseUid,           // Send actual UID value
+        firebaseUid: tempUserData.firebaseUid,
         email: tempUserData.email,
         phoneNumber: tempUserData.phoneNumber,
         fullName: tempUserData.name || tempUserData.fullName || `${tempUserData.firstName} ${tempUserData.lastName}`,
-        role: selectedRole,
+        role: 'customer',
         firstName: tempUserData.firstName,
         lastName: tempUserData.lastName,
         address: tempUserData.address,
       };
-
-      // Log for debugging (but don't modify the values!)
-      console.log('📤 Sending registration data:');
-      console.log('  firebaseUid:', registrationData.firebaseUid);
-      console.log('  email:', registrationData.email);
-      console.log('  phoneNumber:', registrationData.phoneNumber);
-      console.log('  fullName:', registrationData.fullName);
-      console.log('  role:', registrationData.role);
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -132,40 +103,27 @@ function AccountTypeSelection() {
         body: JSON.stringify(registrationData)
       });
 
-      console.log('📨 Response status:', response.status);
-
       const data = await response.json();
-      console.log('📦 Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.message || `Registration failed: ${response.status}`);
       }
 
-      // Success!
-      console.log('✅ Registration successful!');
+      console.log('✅ Customer registration successful!');
 
       sessionStorage.setItem('authToken', data.token || tempUserData.idToken);
       sessionStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
       sessionStorage.removeItem('tempUserData');
 
-      // Navigate based on role
-      if (selectedRole === 'customer') {
-        navigate('/customer/dashboard');
-      } else if (selectedRole === 'worker') {
-        navigate('/worker-registration');
-      }
+      navigate('/customer/dashboard');
 
     } catch (err) {
       console.error('❌ Registration error:', err);
       
       let errorMessage = 'Registration failed. ';
       
-      if (err.message.includes('Failed to fetch') || err.message.includes('fetch')) {
+      if (err.message.includes('Failed to fetch')) {
         errorMessage = 'Cannot connect to server. Please check if backend is running on port 5001.';
-      } else if (err.message.includes('firebaseUid')) {
-        errorMessage = 'Firebase UID is missing. Please sign up again.';
-      } else if (err.message.includes('validation failed')) {
-        errorMessage = 'Validation error: ' + err.message;
       } else if (err.message.includes('already exists')) {
         errorMessage = 'This account already exists. Please login instead.';
       } else {
@@ -175,6 +133,38 @@ function AccountTypeSelection() {
       setError(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ FIXED: Main handler - navigate to worker flow instead of registering
+  const handleContinue = () => {
+    if (!selectedRole) {
+      setError('Please select an account type');
+      return;
+    }
+
+    if (!tempUserData) {
+      setError('Registration data not found.');
+      return;
+    }
+
+    if (!tempUserData.firebaseUid) {
+      console.error('❌ Firebase UID is missing!');
+      setError('Firebase UID is missing. Please sign up again.');
+      return;
+    }
+
+    console.log('🎯 Navigating to registration flow for:', selectedRole);
+
+    if (selectedRole === 'customer') {
+      // Customers register immediately (no additional profile data needed)
+      registerCustomer();
+    } else if (selectedRole === 'worker') {
+      // ✅ NEW APPROACH: Workers navigate to complete registration form FIRST
+      // Registration happens AFTER they fill out the complete profile
+      console.log('→ Navigating to Worker Registration Flow');
+      console.log('📝 Worker will fill complete profile before registration');
+      navigate('/worker-registration');
     }
   };
 

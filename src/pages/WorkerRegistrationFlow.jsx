@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input, Button } from '../components/common';
-import { 
-  Wrench, Hammer, Zap, Paintbrush, Building, Camera, 
-  MapPin, Clock, DollarSign, Check, X 
+import {
+  Wrench, Hammer, Zap, Paintbrush, Building, Camera,
+  MapPin, Clock, DollarSign, Check, X
 } from 'lucide-react';
 
 /**
@@ -23,10 +23,10 @@ const WorkerRegistrationFlow = () => {
   const [formData, setFormData] = useState({
     // Step 1: Service Type
     serviceType: '',
-    
+
     // Step 2: Personal Info (from tempUserData)
     // These will be populated from session storage
-    
+
     // Step 3: Business Information (optional)
     businessName: '',
     businessAddress: '',
@@ -34,26 +34,26 @@ const WorkerRegistrationFlow = () => {
     stateProvince: 'sri lanka',
     postalCode: '',
     website: '',
-    
+
     // Step 4: Experience & Skills
     yearsOfExperience: '',
     specializations: [],
     languagesSpoken: [],
     bio: '',
-    
+
     // Step 5: Service Area & Location
     serviceAddress: '',
     serviceCity: '',
     serviceProvince: 'sri lanka',
     servicePostalCode: '',
     serviceRadius: '10',
-    
+
     // Step 6: Pricing
     dailyWage: '',
     halfDayRate: '',
     minimumCharge: '',
     overtimeHourlyRate: '',
-    
+
     // Step 7: Availability & Settings
     availableDays: [],
     workingHours: {
@@ -131,7 +131,7 @@ const WorkerRegistrationFlow = () => {
     }
     const userData = JSON.parse(storedData);
     setTempUserData(userData);
-    
+
     // Pre-fill personal info from temp data
     setFormData(prev => ({
       ...prev,
@@ -145,7 +145,7 @@ const WorkerRegistrationFlow = () => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value,
     }));
-    
+
     // Clear error
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
@@ -259,70 +259,80 @@ const WorkerRegistrationFlow = () => {
     setLoading(true);
 
     try {
-      // Prepare worker registration data
+      console.log('🚀 Starting worker registration...');
+      console.log('📝 Form data:', formData);
+
+      // ✅ FIXED: Prepare worker registration data with correct structure
       const workerData = {
         // Personal info from tempUserData
         firstName: tempUserData.firstName,
         lastName: tempUserData.lastName,
-        name: tempUserData.name,
+        fullName: tempUserData.fullName || tempUserData.name || `${tempUserData.firstName} ${tempUserData.lastName}`,
         email: tempUserData.email,
         phoneNumber: tempUserData.phoneNumber,
         address: tempUserData.address,
         role: 'worker',
         firebaseUid: tempUserData.firebaseUid,
-        
+
         // Service info
         serviceCategory: formData.serviceType,
-        
+
         // Business info (optional)
-        businessName: formData.businessName,
-        businessAddress: formData.businessAddress,
-        city: formData.city,
-        stateProvince: formData.stateProvince,
-        postalCode: formData.postalCode,
-        website: formData.website,
-        
+        businessName: formData.businessName || '',
+        businessAddress: formData.businessAddress || '',
+        city: formData.city || '',
+        stateProvince: formData.stateProvince || 'sri lanka',
+        postalCode: formData.postalCode || '',
+        website: formData.website || '',
+
         // Experience & Skills
-        yearsOfExperience: parseInt(formData.yearsOfExperience),
-        specializations: formData.specializations,
-        languagesSpoken: formData.languagesSpoken,
-        bio: formData.bio,
-        
-        // Service area
-        serviceArea: {
-          address: formData.serviceAddress,
-          city: formData.serviceCity,
-          province: formData.serviceProvince,
-          postalCode: formData.servicePostalCode,
-          radiusKm: parseInt(formData.serviceRadius),
-        },
-        
-        // Pricing
-        pricing: {
-          dailyWage: parseFloat(formData.dailyWage),
-          halfDayRate: parseFloat(formData.halfDayRate),
-          minimumCharge: parseFloat(formData.minimumCharge),
-          overtimeHourlyRate: parseFloat(formData.overtimeHourlyRate),
-        },
-        
-        // Availability
-        availability: {
-          workingDays: formData.availableDays,
-          workingHours: formData.workingHours,
-          availableOnWeekends: formData.availableOnWeekends,
-        },
-        
+        yearsOfExperience: formData.yearsOfExperience ? parseInt(formData.yearsOfExperience) : 0,
+        specializations: formData.specializations || [],
+        languagesSpoken: formData.languagesSpoken || [],
+        bio: formData.bio || '',
+
+        // ✅ FIX: Send individual service area fields (backend will build the array)
+        serviceAddress: formData.serviceAddress || '',
+        serviceCity: formData.serviceCity || '',
+        serviceProvince: formData.serviceProvince || 'sri lanka',
+        servicePostalCode: formData.servicePostalCode || '',
+        serviceRadius: formData.serviceRadius ? parseInt(formData.serviceRadius) : 10,
+
+        // ✅ FIX: Send individual pricing fields (not nested object)
+        dailyWage: formData.dailyWage ? parseFloat(formData.dailyWage) : 0,
+        halfDayRate: formData.halfDayRate ? parseFloat(formData.halfDayRate) : 0,
+        minimumCharge: formData.minimumCharge ? parseFloat(formData.minimumCharge) : 0,
+        overtimeHourlyRate: formData.overtimeHourlyRate ? parseFloat(formData.overtimeHourlyRate) : 0,
+
+        // ✅ FIX: Send availability as individual fields (backend will build workingHours)
+        availableDays: formData.availableDays || [],
+        workingHours: formData.workingHours || { startTime: '08:00', endTime: '18:00' },
+        availableOnWeekends: formData.availableOnWeekends || false,
+
         // Settings
-        emergencyServices: formData.emergencyServices,
-        ownTools: formData.ownTools,
-        vehicleAvailable: formData.vehicleAvailable,
-        certified: formData.certified,
-        insured: formData.insured,
-        whatsappAvailable: formData.whatsappAvailable,
+        emergencyServices: formData.emergencyServices || false,
+        ownTools: formData.ownTools || false,
+        vehicleAvailable: formData.vehicleAvailable || false,
+        certified: formData.certified || false,
+        insured: formData.insured || false,
+        whatsappAvailable: formData.whatsappAvailable || false,
       };
 
+      console.log('📤 Sending worker data:', {
+        role: workerData.role,
+        email: workerData.email,
+        serviceCategory: workerData.serviceCategory,
+        specializations: workerData.specializations,
+        yearsOfExperience: workerData.yearsOfExperience,
+        dailyWage: workerData.dailyWage,
+        availableDays: workerData.availableDays
+      });
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      console.log('🔗 API URL:', `${apiUrl}/api/v1/auth/signup`);
+
       // Create worker account in backend
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/auth/signup`, {
+      const response = await fetch(`${apiUrl}/api/v1/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,24 +341,31 @@ const WorkerRegistrationFlow = () => {
         body: JSON.stringify(workerData),
       });
 
+      console.log('📨 Response status:', response.status);
+
       const data = await response.json();
+      console.log('📦 Response data:', data);
 
       if (!response.ok) {
+        console.error('❌ Registration failed:', data);
         throw new Error(data.message || 'Worker registration failed');
       }
 
+      console.log('✅ Worker registered successfully!');
+
       // Store auth token and user data
-      sessionStorage.setItem('authToken', tempUserData.idToken);
-      sessionStorage.setItem('user', JSON.stringify(data.user));
+      sessionStorage.setItem('authToken', data.token || tempUserData.idToken);
+      sessionStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
       sessionStorage.removeItem('tempUserData');
 
       // Show success message
-      alert('Registration completed successfully!');
+      alert('Registration completed successfully! Welcome to FixMate!');
 
       // Navigate to worker dashboard
       navigate('/worker/dashboard');
+
     } catch (error) {
-      console.error('Worker registration error:', error);
+      console.error('❌ Worker registration error:', error);
       alert('Failed to complete registration: ' + error.message);
     } finally {
       setLoading(false);
@@ -378,12 +395,12 @@ const WorkerRegistrationFlow = () => {
           <p className="text-gray-600 mt-2">
             Step {currentStep} of {totalSteps}: {
               currentStep === 1 ? 'Service Type' :
-              currentStep === 2 ? 'Personal Info' :
-              currentStep === 3 ? 'Business Info' :
-              currentStep === 4 ? 'Experience & Skills' :
-              currentStep === 5 ? 'Service Area' :
-              currentStep === 6 ? 'Pricing' :
-              'Availability & Settings'
+                currentStep === 2 ? 'Personal Info' :
+                  currentStep === 3 ? 'Business Info' :
+                    currentStep === 4 ? 'Experience & Skills' :
+                      currentStep === 5 ? 'Service Area' :
+                        currentStep === 6 ? 'Pricing' :
+                          'Availability & Settings'
             }
           </p>
         </div>
@@ -394,9 +411,8 @@ const WorkerRegistrationFlow = () => {
             {Array.from({ length: totalSteps }).map((_, index) => (
               <div
                 key={index}
-                className={`flex-1 h-2 rounded-full mx-1 ${
-                  index < currentStep ? 'bg-indigo-600' : 'bg-gray-200'
-                }`}
+                className={`flex-1 h-2 rounded-full mx-1 ${index < currentStep ? 'bg-indigo-600' : 'bg-gray-200'
+                  }`}
               />
             ))}
           </div>
@@ -413,7 +429,7 @@ const WorkerRegistrationFlow = () => {
               <p className="text-sm text-gray-600 mb-6">
                 Select the main service category that best describes your expertise
               </p>
-              
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {serviceCategories.map((category) => {
                   const Icon = category.icon;
@@ -421,11 +437,10 @@ const WorkerRegistrationFlow = () => {
                     <button
                       key={category.id}
                       onClick={() => setFormData({ ...formData, serviceType: category.id })}
-                      className={`p-6 rounded-lg border-2 transition-all ${
-                        formData.serviceType === category.id
+                      className={`p-6 rounded-lg border-2 transition-all ${formData.serviceType === category.id
                           ? 'border-indigo-600 bg-indigo-50'
                           : 'border-gray-200 hover:border-indigo-300'
-                      }`}
+                        }`}
                     >
                       <Icon className="h-10 w-10 text-indigo-600 mb-3" />
                       <p className="font-medium text-gray-900">{category.label}</p>
@@ -433,7 +448,7 @@ const WorkerRegistrationFlow = () => {
                   );
                 })}
               </div>
-              
+
               {errors.serviceType && (
                 <p className="text-sm text-red-600 mt-2">{errors.serviceType}</p>
               )}
@@ -463,13 +478,13 @@ const WorkerRegistrationFlow = () => {
                     disabled
                   />
                 </div>
-                
+
                 <Input
                   label="Email"
                   value={tempUserData.email}
                   disabled
                 />
-                
+
                 <Input
                   label="Phone Number"
                   value={tempUserData.phoneNumber}
@@ -581,11 +596,10 @@ const WorkerRegistrationFlow = () => {
                       key={spec}
                       type="button"
                       onClick={() => handleArrayToggle('specializations', spec)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                        formData.specializations.includes(spec)
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${formData.specializations.includes(spec)
                           ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-600'
                           : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       {formData.specializations.includes(spec) && (
                         <Check className="inline h-4 w-4 mr-1" />
@@ -609,11 +623,10 @@ const WorkerRegistrationFlow = () => {
                       key={lang}
                       type="button"
                       onClick={() => handleArrayToggle('languagesSpoken', lang)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
-                        formData.languagesSpoken.includes(lang)
+                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${formData.languagesSpoken.includes(lang)
                           ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-600'
                           : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:border-gray-300'
-                      }`}
+                        }`}
                     >
                       {formData.languagesSpoken.includes(lang) && (
                         <Check className="inline h-4 w-4 mr-1" />
@@ -964,7 +977,7 @@ const WorkerRegistrationFlow = () => {
                   Skip
                 </Button>
               )}
-              
+
               {currentStep < totalSteps ? (
                 <Button
                   type="button"
