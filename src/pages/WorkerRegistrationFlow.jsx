@@ -5,6 +5,7 @@ import {
   Wrench, Hammer, Zap, Paintbrush, Building, Camera,
   MapPin, Clock, DollarSign, Check, X, AlertCircle
 } from 'lucide-react';
+import axios from 'axios';
 
 /**
  * Worker Registration Flow Component
@@ -150,7 +151,7 @@ const WorkerRegistrationFlow = () => {
       navigate('/signup');
       return;
     }
-    
+
     try {
       const userData = JSON.parse(storedData);
       console.log('✅ Loaded temp user data:', {
@@ -158,7 +159,7 @@ const WorkerRegistrationFlow = () => {
         firebaseUid: userData.firebaseUid ? '✅ Present' : '❌ Missing',
         idToken: userData.idToken ? '✅ Present' : '❌ Missing'
       });
-      
+
       setTempUserData(userData);
 
       // Pre-fill personal info from temp data
@@ -291,6 +292,9 @@ const WorkerRegistrationFlow = () => {
     }
   };
 
+  // Update the handleSubmit function in WorkerRegistrationFlow.jsx
+  // This replaces the existing handleSubmit function around line 180-350
+
   const handleSubmit = async () => {
     if (!validateStep() || !tempUserData) {
       console.error('❌ Validation failed or no temp user data');
@@ -303,7 +307,7 @@ const WorkerRegistrationFlow = () => {
     try {
       console.log('\n🚀 Starting worker registration...');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      
+
       // ✅ CRITICAL: Verify we have required data
       if (!tempUserData.firebaseUid) {
         throw new Error('Missing Firebase UID. Please sign up again.');
@@ -321,8 +325,7 @@ const WorkerRegistrationFlow = () => {
         hasToken: !!tempUserData.idToken
       });
 
-      // ✅ FIXED: Prepare worker registration data with FLAT structure
-      // This matches the Worker model schema requirements
+      // ✅ FIXED: Prepare worker registration data with CORRECTED structure
       const workerData = {
         // Basic user info
         firstName: tempUserData.firstName || '',
@@ -334,158 +337,176 @@ const WorkerRegistrationFlow = () => {
         role: 'worker',
         firebaseUid: tempUserData.firebaseUid,
 
-        // Service info (FLAT - not nested)
-        serviceCategory: formData.serviceType,
+        // ✅ FIXED: Service category as array (matches Worker model enum)
+        serviceCategories: [formData.serviceType],
+
+        // ✅ FIXED: Detailed specializations (flexible strings)
         specializations: formData.specializations || [],
-        yearsOfExperience: formData.yearsOfExperience ? parseInt(formData.yearsOfExperience) : 0,
-        languagesSpoken: formData.languagesSpoken || ['English'],
+
+        // Experience
+        experience: formData.yearsOfExperience ? parseInt(formData.yearsOfExperience, 10) : 0,
+
+        // Pricing - using hourlyRate to match Worker model
+        // Converting dailyWage to approximate hourly rate (assuming 8-hour day)
+        hourlyRate: formData.dailyWage ? Math.round(parseInt(formData.dailyWage, 10) / 8) : 0,
+
+        // Skills - combining languages and other skills
+        skills: [
+          ...(formData.languagesSpoken || []),
+          // You can add other skills here
+        ],
+
+        // Bio
         bio: formData.bio || '',
 
-        // Business info (FLAT - optional)
-        businessName: formData.businessName || '',
-        businessAddress: formData.businessAddress || '',
-        city: formData.city || formData.serviceCity || '',
-        stateProvince: formData.stateProvince || 'Western',
-        postalCode: formData.postalCode || '',
-        website: formData.website || '',
+        // Service locations
+        serviceLocations: [{
+          city: formData.serviceCity || formData.city || '',
+          district: formData.serviceProvince || 'Western'
+        }],
 
-        // Service area (FLAT fields - backend will build serviceLocations array)
-        serviceAddress: formData.serviceAddress || '',
-        serviceCity: formData.serviceCity || '',
-        serviceProvince: formData.serviceProvince || 'Western',
-        servicePostalCode: formData.servicePostalCode || '',
-        serviceRadius: formData.serviceRadius ? parseFloat(formData.serviceRadius) : 10,
+        // Availability
+        availability: formData.availableDays && formData.availableDays.length > 0,
 
-        // Pricing (FLAT fields - backend will calculate hourlyRate from dailyWage)
-        dailyWage: formData.dailyWage ? parseFloat(formData.dailyWage) : 3000,
-        halfDayRate: formData.halfDayRate ? parseFloat(formData.halfDayRate) : (parseFloat(formData.dailyWage || 3000) * 0.6),
-        minimumCharge: formData.minimumCharge ? parseFloat(formData.minimumCharge) : 1000,
-        overtimeHourlyRate: formData.overtimeHourlyRate ? parseFloat(formData.overtimeHourlyRate) : 200,
+        // ✅ FIXED: Working hours - convert to Worker model format
+        workingHours: {
+          monday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Monday')
+          },
+          tuesday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Tuesday')
+          },
+          wednesday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Wednesday')
+          },
+          thursday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Thursday')
+          },
+          friday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Friday')
+          },
+          saturday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Saturday')
+          },
+          sunday: {
+            start: formData.workingHours.startTime || '08:00',
+            end: formData.workingHours.endTime || '18:00',
+            available: formData.availableDays.includes('Sunday')
+          }
+        },
 
-        // Availability (FLAT - backend will build workingHours object)
-        availableDays: formData.availableDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
-        workingHours: formData.workingHours || { startTime: '08:00', endTime: '18:00' },
-
-        // Settings (FLAT booleans)
-        availableOnWeekends: formData.availableOnWeekends || false,
-        emergencyServices: formData.emergencyServices || false,
-        ownTools: formData.ownTools || false,
-        vehicleAvailable: formData.vehicleAvailable || false,
-        certified: formData.certified || false,
-        insured: formData.insured || false,
-        whatsappAvailable: formData.whatsappAvailable || false,
+        // Additional settings from Step 7
+        settings: {
+          availableOnWeekends: formData.availableOnWeekends,
+          emergencyServices: formData.emergencyServices,
+          ownTools: formData.ownTools,
+          vehicleAvailable: formData.vehicleAvailable,
+          certified: formData.certified,
+          insured: formData.insured,
+          whatsappAvailable: formData.whatsappAvailable
+        }
       };
 
-      console.log('\n📤 Sending FLAT worker data structure:');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Basic Info:', {
-        role: workerData.role,
-        email: workerData.email,
-        fullName: workerData.fullName,
-        firebaseUid: workerData.firebaseUid.substring(0, 10) + '...'
-      });
-      console.log('Service Info:', {
-        serviceCategory: workerData.serviceCategory,
+      console.log('📦 Worker Data Structure:');
+      console.log(JSON.stringify({
+        serviceCategories: workerData.serviceCategories,
         specializations: workerData.specializations,
-        yearsOfExperience: workerData.yearsOfExperience
-      });
-      console.log('Pricing (FLAT):', {
-        dailyWage: workerData.dailyWage,
-        halfDayRate: workerData.halfDayRate,
-        // Note: Backend will convert dailyWage to hourlyRate
-      });
-      console.log('Availability (FLAT):', {
-        availableDays: workerData.availableDays,
-        workingHours: workerData.workingHours,
-        // Note: Backend will build structured workingHours object
-      });
-      console.log('Settings (FLAT booleans):', {
-        emergencyServices: workerData.emergencyServices,
-        ownTools: workerData.ownTools,
-        certified: workerData.certified
-      });
+        experience: workerData.experience,
+        hourlyRate: workerData.hourlyRate,
+        skills: workerData.skills,
+        availability: workerData.availability,
+        serviceLocations: workerData.serviceLocations
+      }, null, 2));
 
-      // ✅ CRITICAL FIX: Build proper API endpoint
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      
-      // Remove any trailing slashes
-      const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-      
-      // Build full endpoint with /api/v1 prefix
-      const endpoint = `${cleanBaseUrl}/api/v1/auth/signup`;
-      
-      console.log('\n🔗 API Configuration:');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Base URL from env:', import.meta.env.VITE_API_URL || '(not set)');
-      console.log('Clean Base URL:', cleanBaseUrl);
-      console.log('Full Endpoint:', endpoint);
-      console.log('Expected:', 'http://localhost:5001/api/v1/auth/signup');
-      console.log('Match:', endpoint === 'http://localhost:5001/api/v1/auth/signup' ? '✅ YES' : '❌ NO');
-
-      // Create worker account in backend
-      const response = await fetch(endpoint, {
-        method: 'POST',
+      // Set authorization header with Firebase ID token
+      const config = {
         headers: {
-          'Content-Type': 'application/json',
           'Authorization': `Bearer ${tempUserData.idToken}`,
-        },
-        body: JSON.stringify(workerData),
-      });
-
-      console.log('\n📨 Response received:');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('Status:', response.status, response.statusText);
-
-      let data;
-      try {
-        data = await response.json();
-        console.log('Response data:', data);
-      } catch (jsonError) {
-        console.error('❌ Failed to parse response as JSON:', jsonError);
-        throw new Error('Invalid response from server');
-      }
-
-      if (!response.ok) {
-        console.error('\n❌ Registration failed:');
-        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-        console.error('Status:', response.status);
-        console.error('Message:', data.message || 'Unknown error');
-        console.error('Details:', data);
-        
-        // Handle specific error cases
-        if (data.message === 'User already registered') {
-          throw new Error('This email is already registered. If you created an account but didn\'t complete worker registration, please contact support or delete the existing user from the database first.');
+          'Content-Type': 'application/json'
         }
-        
-        throw new Error(data.message || `Registration failed with status ${response.status}`);
+      };
+
+      console.log('🌐 Making API request to:', `${import.meta.env.VITE_API_URL}/api/v1/auth/signup`);
+
+      // Make API call
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}/api/v1/auth/signup`,
+        workerData,
+        config
+      );
+
+      console.log('✅ Registration successful:', response.data);
+
+      if (response.data.success) {
+        setRegistrationSuccess(true);
+
+        // Clear session storage
+        sessionStorage.removeItem('tempUserData');
+        sessionStorage.removeItem('userEmail');
+        sessionStorage.removeItem('pendingRegistration');
+
+        // Store user data in localStorage
+        if (response.data.data) {
+          localStorage.setItem('user', JSON.stringify(response.data.data.user));
+          if (response.data.data.token) {
+            localStorage.setItem('token', response.data.data.token);
+          }
+        }
+
+        // Redirect to worker dashboard after 2 seconds
+        setTimeout(() => {
+          navigate('/worker/dashboard');
+        }, 2000);
       }
-
-      console.log('\n✅ Registration successful!');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log('User ID:', data.data?.user?.id || 'N/A');
-      console.log('Email:', data.data?.user?.email || workerData.email);
-      console.log('Role:', data.data?.user?.role || 'worker');
-
-      // Clear session storage
-      sessionStorage.removeItem('tempUserData');
-      console.log('✅ Cleared temp user data from session storage');
-
-      // Show success message
-      setRegistrationSuccess(true);
-      
-      // Redirect to worker dashboard after 2 seconds
-      console.log('🔄 Redirecting to worker dashboard...');
-      setTimeout(() => {
-        navigate('/worker/dashboard');
-      }, 2000);
 
     } catch (error) {
-      console.error('\n❌ Worker registration error:');
-      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.error('Error:', error.message);
-      console.error('Stack:', error.stack);
-      
-      setRegistrationError(error.message || 'Registration failed. Please try again.');
+      console.error('❌ Worker registration error:', error);
+
+      let errorMessage = 'Registration failed. Please try again.';
+
+      if (error.response) {
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+
+        // Extract detailed error message
+        if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        } else if (error.response.data?.error) {
+          errorMessage = error.response.data.error;
+        }
+
+        // Handle specific validation errors
+        if (error.response.data?.details) {
+          console.error('Validation errors:', error.response.data.details);
+          const validationErrors = error.response.data.details;
+
+          // Show first validation error
+          if (validationErrors.errors && Object.keys(validationErrors.errors).length > 0) {
+            const firstError = Object.values(validationErrors.errors)[0];
+            errorMessage = firstError.message || errorMessage;
+          }
+        }
+      } else if (error.request) {
+        console.error('No response received:', error.request);
+        errorMessage = 'No response from server. Please check your connection.';
+      } else {
+        console.error('Error message:', error.message);
+        errorMessage = error.message;
+      }
+
+      setRegistrationError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -562,7 +583,7 @@ const WorkerRegistrationFlow = () => {
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Select Your Service Type
               </h2>
-              
+
               {errors.serviceType && (
                 <p className="text-sm text-red-600">{errors.serviceType}</p>
               )}
@@ -578,11 +599,10 @@ const WorkerRegistrationFlow = () => {
                         setFormData({ ...formData, serviceType: category.id });
                         setErrors({ ...errors, serviceType: '' });
                       }}
-                      className={`p-6 border-2 rounded-lg text-left transition-all ${
-                        formData.serviceType === category.id
+                      className={`p-6 border-2 rounded-lg text-left transition-all ${formData.serviceType === category.id
                           ? 'border-indigo-600 bg-indigo-50'
                           : 'border-gray-200 hover:border-indigo-300'
-                      }`}
+                        }`}
                     >
                       <Icon className="h-8 w-8 text-indigo-600 mb-3" />
                       <h3 className="font-semibold text-gray-900">{category.label}</h3>
