@@ -3,12 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Input, Button } from '../components/common';
 import {
   Wrench, Hammer, Zap, Paintbrush, Building, Camera,
-  MapPin, Clock, DollarSign, Check, X
+  MapPin, Clock, DollarSign, Check, X, AlertCircle
 } from 'lucide-react';
 
 /**
  * Worker Registration Flow Component
  * Multi-step registration for workers with 7 steps
+ * 
+ * ✅ FIXED: Sends FLAT data structure to match Worker model schema
  */
 const WorkerRegistrationFlow = () => {
   const navigate = useNavigate();
@@ -16,6 +18,8 @@ const WorkerRegistrationFlow = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [tempUserData, setTempUserData] = useState(null);
+  const [registrationError, setRegistrationError] = useState(null);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   const totalSteps = 7;
 
@@ -31,7 +35,7 @@ const WorkerRegistrationFlow = () => {
     businessName: '',
     businessAddress: '',
     city: '',
-    stateProvince: 'sri lanka',
+    stateProvince: 'Western',
     postalCode: '',
     website: '',
 
@@ -44,7 +48,7 @@ const WorkerRegistrationFlow = () => {
     // Step 5: Service Area & Location
     serviceAddress: '',
     serviceCity: '',
-    serviceProvince: 'sri lanka',
+    serviceProvince: 'Western',
     servicePostalCode: '',
     serviceRadius: '10',
 
@@ -113,6 +117,22 @@ const WorkerRegistrationFlow = () => {
       'Commercial Painting',
       'Decorative Painting'
     ],
+    construction: [
+      'Foundation Work',
+      'Framing',
+      'Roofing',
+      'Concrete Work',
+      'Demolition',
+      'General Construction'
+    ],
+    photography: [
+      'Event Photography',
+      'Portrait Photography',
+      'Product Photography',
+      'Real Estate Photography',
+      'Wedding Photography',
+      'Commercial Photography'
+    ]
   };
 
   // Languages
@@ -126,17 +146,30 @@ const WorkerRegistrationFlow = () => {
     const storedData = sessionStorage.getItem('tempUserData');
     if (!storedData) {
       // If no temp data, redirect to signup
+      console.log('⚠️ No temp user data found, redirecting to signup...');
       navigate('/signup');
       return;
     }
-    const userData = JSON.parse(storedData);
-    setTempUserData(userData);
+    
+    try {
+      const userData = JSON.parse(storedData);
+      console.log('✅ Loaded temp user data:', {
+        email: userData.email,
+        firebaseUid: userData.firebaseUid ? '✅ Present' : '❌ Missing',
+        idToken: userData.idToken ? '✅ Present' : '❌ Missing'
+      });
+      
+      setTempUserData(userData);
 
-    // Pre-fill personal info from temp data
-    setFormData(prev => ({
-      ...prev,
-      serviceAddress: userData.address,
-    }));
+      // Pre-fill personal info from temp data
+      setFormData(prev => ({
+        ...prev,
+        serviceAddress: userData.address || '',
+      }));
+    } catch (error) {
+      console.error('❌ Error parsing temp user data:', error);
+      navigate('/signup');
+    }
   }, [navigate]);
 
   const handleChange = (e) => {
@@ -223,7 +256,9 @@ const WorkerRegistrationFlow = () => {
         break;
 
       case 7: // Availability
-        // Optional validations
+        if (formData.availableDays.length === 0) {
+          newErrors.availableDays = 'Please select at least one available day';
+        }
         break;
     }
 
@@ -239,77 +274,100 @@ const WorkerRegistrationFlow = () => {
       } else {
         setCurrentStep(currentStep + 1);
       }
+      window.scrollTo(0, 0);
     }
   };
 
   const handlePrevious = () => {
     setCurrentStep(currentStep - 1);
+    window.scrollTo(0, 0);
   };
 
   const handleSkip = () => {
     // Only allow skip on business information step
     if (currentStep === 3) {
       setCurrentStep(currentStep + 1);
+      window.scrollTo(0, 0);
     }
   };
 
   const handleSubmit = async () => {
-    if (!validateStep() || !tempUserData) return;
+    if (!validateStep() || !tempUserData) {
+      console.error('❌ Validation failed or no temp user data');
+      return;
+    }
 
     setLoading(true);
+    setRegistrationError(null);
 
     try {
-      console.log('🚀 Starting worker registration...');
-      console.log('📝 Form data:', formData);
+      console.log('\n🚀 Starting worker registration...');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // ✅ CRITICAL: Verify we have required data
+      if (!tempUserData.firebaseUid) {
+        throw new Error('Missing Firebase UID. Please sign up again.');
+      }
+      if (!tempUserData.email) {
+        throw new Error('Missing email. Please sign up again.');
+      }
+      if (!tempUserData.idToken) {
+        throw new Error('Missing authentication token. Please sign up again.');
+      }
 
-      // ✅ FIXED: Prepare worker registration data with correct structure
-      const workerData = {
-        // Personal info from tempUserData
-        firstName: tempUserData.firstName,
-        lastName: tempUserData.lastName,
-        fullName: tempUserData.fullName || tempUserData.name || `${tempUserData.firstName} ${tempUserData.lastName}`,
+      console.log('✅ Temp user data validated:', {
         email: tempUserData.email,
-        phoneNumber: tempUserData.phoneNumber,
-        address: tempUserData.address,
+        firebaseUid: tempUserData.firebaseUid.substring(0, 10) + '...',
+        hasToken: !!tempUserData.idToken
+      });
+
+      // ✅ FIXED: Prepare worker registration data with FLAT structure
+      // This matches the Worker model schema requirements
+      const workerData = {
+        // Basic user info
+        firstName: tempUserData.firstName || '',
+        lastName: tempUserData.lastName || '',
+        fullName: tempUserData.fullName || tempUserData.name || `${tempUserData.firstName || ''} ${tempUserData.lastName || ''}`.trim(),
+        email: tempUserData.email,
+        phoneNumber: tempUserData.phoneNumber || '',
+        address: tempUserData.address || '',
         role: 'worker',
         firebaseUid: tempUserData.firebaseUid,
 
-        // Service info
+        // Service info (FLAT - not nested)
         serviceCategory: formData.serviceType,
+        specializations: formData.specializations || [],
+        yearsOfExperience: formData.yearsOfExperience ? parseInt(formData.yearsOfExperience) : 0,
+        languagesSpoken: formData.languagesSpoken || ['English'],
+        bio: formData.bio || '',
 
-        // Business info (optional)
+        // Business info (FLAT - optional)
         businessName: formData.businessName || '',
         businessAddress: formData.businessAddress || '',
-        city: formData.city || '',
-        stateProvince: formData.stateProvince || 'sri lanka',
+        city: formData.city || formData.serviceCity || '',
+        stateProvince: formData.stateProvince || 'Western',
         postalCode: formData.postalCode || '',
         website: formData.website || '',
 
-        // Experience & Skills
-        yearsOfExperience: formData.yearsOfExperience ? parseInt(formData.yearsOfExperience) : 0,
-        specializations: formData.specializations || [],
-        languagesSpoken: formData.languagesSpoken || [],
-        bio: formData.bio || '',
-
-        // ✅ FIX: Send individual service area fields (backend will build the array)
+        // Service area (FLAT fields - backend will build serviceLocations array)
         serviceAddress: formData.serviceAddress || '',
         serviceCity: formData.serviceCity || '',
-        serviceProvince: formData.serviceProvince || 'sri lanka',
+        serviceProvince: formData.serviceProvince || 'Western',
         servicePostalCode: formData.servicePostalCode || '',
-        serviceRadius: formData.serviceRadius ? parseInt(formData.serviceRadius) : 10,
+        serviceRadius: formData.serviceRadius ? parseFloat(formData.serviceRadius) : 10,
 
-        // ✅ FIX: Send individual pricing fields (not nested object)
-        dailyWage: formData.dailyWage ? parseFloat(formData.dailyWage) : 0,
-        halfDayRate: formData.halfDayRate ? parseFloat(formData.halfDayRate) : 0,
-        minimumCharge: formData.minimumCharge ? parseFloat(formData.minimumCharge) : 0,
-        overtimeHourlyRate: formData.overtimeHourlyRate ? parseFloat(formData.overtimeHourlyRate) : 0,
+        // Pricing (FLAT fields - backend will calculate hourlyRate from dailyWage)
+        dailyWage: formData.dailyWage ? parseFloat(formData.dailyWage) : 3000,
+        halfDayRate: formData.halfDayRate ? parseFloat(formData.halfDayRate) : (parseFloat(formData.dailyWage || 3000) * 0.6),
+        minimumCharge: formData.minimumCharge ? parseFloat(formData.minimumCharge) : 1000,
+        overtimeHourlyRate: formData.overtimeHourlyRate ? parseFloat(formData.overtimeHourlyRate) : 200,
 
-        // ✅ FIX: Send availability as individual fields (backend will build workingHours)
-        availableDays: formData.availableDays || [],
+        // Availability (FLAT - backend will build workingHours object)
+        availableDays: formData.availableDays || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
         workingHours: formData.workingHours || { startTime: '08:00', endTime: '18:00' },
-        availableOnWeekends: formData.availableOnWeekends || false,
 
-        // Settings
+        // Settings (FLAT booleans)
+        availableOnWeekends: formData.availableOnWeekends || false,
         emergencyServices: formData.emergencyServices || false,
         ownTools: formData.ownTools || false,
         vehicleAvailable: formData.vehicleAvailable || false,
@@ -318,21 +376,54 @@ const WorkerRegistrationFlow = () => {
         whatsappAvailable: formData.whatsappAvailable || false,
       };
 
-      console.log('📤 Sending worker data:', {
+      console.log('\n📤 Sending FLAT worker data structure:');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Basic Info:', {
         role: workerData.role,
         email: workerData.email,
+        fullName: workerData.fullName,
+        firebaseUid: workerData.firebaseUid.substring(0, 10) + '...'
+      });
+      console.log('Service Info:', {
         serviceCategory: workerData.serviceCategory,
         specializations: workerData.specializations,
-        yearsOfExperience: workerData.yearsOfExperience,
+        yearsOfExperience: workerData.yearsOfExperience
+      });
+      console.log('Pricing (FLAT):', {
         dailyWage: workerData.dailyWage,
-        availableDays: workerData.availableDays
+        halfDayRate: workerData.halfDayRate,
+        // Note: Backend will convert dailyWage to hourlyRate
+      });
+      console.log('Availability (FLAT):', {
+        availableDays: workerData.availableDays,
+        workingHours: workerData.workingHours,
+        // Note: Backend will build structured workingHours object
+      });
+      console.log('Settings (FLAT booleans):', {
+        emergencyServices: workerData.emergencyServices,
+        ownTools: workerData.ownTools,
+        certified: workerData.certified
       });
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      console.log('🔗 API URL:', `${apiUrl}/api/v1/auth/signup`);
+      // ✅ CRITICAL FIX: Build proper API endpoint
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      
+      // Remove any trailing slashes
+      const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+      
+      // Build full endpoint with /api/v1 prefix
+      const endpoint = `${cleanBaseUrl}/api/v1/auth/signup`;
+      
+      console.log('\n🔗 API Configuration:');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Base URL from env:', import.meta.env.VITE_API_URL || '(not set)');
+      console.log('Clean Base URL:', cleanBaseUrl);
+      console.log('Full Endpoint:', endpoint);
+      console.log('Expected:', 'http://localhost:5001/api/v1/auth/signup');
+      console.log('Match:', endpoint === 'http://localhost:5001/api/v1/auth/signup' ? '✅ YES' : '❌ NO');
 
       // Create worker account in backend
-      const response = await fetch(`${apiUrl}/api/v1/auth/signup`, {
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -341,32 +432,60 @@ const WorkerRegistrationFlow = () => {
         body: JSON.stringify(workerData),
       });
 
-      console.log('📨 Response status:', response.status);
+      console.log('\n📨 Response received:');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('Status:', response.status, response.statusText);
 
-      const data = await response.json();
-      console.log('📦 Response data:', data);
-
-      if (!response.ok) {
-        console.error('❌ Registration failed:', data);
-        throw new Error(data.message || 'Worker registration failed');
+      let data;
+      try {
+        data = await response.json();
+        console.log('Response data:', data);
+      } catch (jsonError) {
+        console.error('❌ Failed to parse response as JSON:', jsonError);
+        throw new Error('Invalid response from server');
       }
 
-      console.log('✅ Worker registered successfully!');
+      if (!response.ok) {
+        console.error('\n❌ Registration failed:');
+        console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        console.error('Status:', response.status);
+        console.error('Message:', data.message || 'Unknown error');
+        console.error('Details:', data);
+        
+        // Handle specific error cases
+        if (data.message === 'User already registered') {
+          throw new Error('This email is already registered. If you created an account but didn\'t complete worker registration, please contact support or delete the existing user from the database first.');
+        }
+        
+        throw new Error(data.message || `Registration failed with status ${response.status}`);
+      }
 
-      // Store auth token and user data
-      sessionStorage.setItem('authToken', data.token || tempUserData.idToken);
-      sessionStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
+      console.log('\n✅ Registration successful!');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.log('User ID:', data.data?.user?.id || 'N/A');
+      console.log('Email:', data.data?.user?.email || workerData.email);
+      console.log('Role:', data.data?.user?.role || 'worker');
+
+      // Clear session storage
       sessionStorage.removeItem('tempUserData');
+      console.log('✅ Cleared temp user data from session storage');
 
       // Show success message
-      alert('Registration completed successfully! Welcome to FixMate!');
-
-      // Navigate to worker dashboard
-      navigate('/worker/dashboard');
+      setRegistrationSuccess(true);
+      
+      // Redirect to worker dashboard after 2 seconds
+      console.log('🔄 Redirecting to worker dashboard...');
+      setTimeout(() => {
+        navigate('/worker/dashboard');
+      }, 2000);
 
     } catch (error) {
-      console.error('❌ Worker registration error:', error);
-      alert('Failed to complete registration: ' + error.message);
+      console.error('\n❌ Worker registration error:');
+      console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      console.error('Error:', error.message);
+      console.error('Stack:', error.stack);
+      
+      setRegistrationError(error.message || 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -374,132 +493,137 @@ const WorkerRegistrationFlow = () => {
 
   if (!tempUserData) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading registration form...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-gray-600 hover:text-gray-900 mb-4 inline-flex items-center"
-          >
-            ← Back
-          </button>
-          <h1 className="text-3xl font-bold text-gray-900">Worker Registration</h1>
-          <p className="text-gray-600 mt-2">
-            Step {currentStep} of {totalSteps}: {
-              currentStep === 1 ? 'Service Type' :
-                currentStep === 2 ? 'Personal Info' :
-                  currentStep === 3 ? 'Business Info' :
-                    currentStep === 4 ? 'Experience & Skills' :
-                      currentStep === 5 ? 'Service Area' :
-                        currentStep === 6 ? 'Pricing' :
-                          'Availability & Settings'
-            }
-          </p>
-        </div>
-
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Progress Bar */}
         <div className="mb-8">
-          <div className="flex items-center justify-between mb-2">
-            {Array.from({ length: totalSteps }).map((_, index) => (
-              <div
-                key={index}
-                className={`flex-1 h-2 rounded-full mx-1 ${index < currentStep ? 'bg-indigo-600' : 'bg-gray-200'
-                  }`}
-              />
-            ))}
+          <div className="flex justify-between items-center mb-2">
+            <h1 className="text-2xl font-bold text-gray-900">Worker Registration</h1>
+            <span className="text-sm text-gray-600">
+              Step {currentStep} of {totalSteps}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2">
+            <div
+              className="bg-indigo-600 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${(currentStep / totalSteps) * 100}%` }}
+            />
           </div>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
+        {/* Error Message */}
+        {registrationError && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-red-900">Registration Error</h3>
+                <p className="text-sm text-red-700 mt-1">{registrationError}</p>
+                {registrationError.includes('already registered') && (
+                  <p className="text-sm text-red-600 mt-2">
+                    💡 <strong>Solution:</strong> Run the cleanup script to remove partial registration, then try again.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Success Message */}
+        {registrationSuccess && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-start">
+              <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
+              <div className="ml-3">
+                <h3 className="text-sm font-medium text-green-900">Registration Successful!</h3>
+                <p className="text-sm text-green-700 mt-1">
+                  Your worker profile has been created. Redirecting to your dashboard...
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Form Container */}
+        <div className="bg-white rounded-lg shadow-md p-6 md:p-8">
           {/* Step 1: Service Type */}
           {currentStep === 1 && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                What type of service do you provide?
+                Select Your Service Type
               </h2>
-              <p className="text-sm text-gray-600 mb-6">
-                Select the main service category that best describes your expertise
-              </p>
+              
+              {errors.serviceType && (
+                <p className="text-sm text-red-600">{errors.serviceType}</p>
+              )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {serviceCategories.map((category) => {
                   const Icon = category.icon;
                   return (
                     <button
                       key={category.id}
-                      onClick={() => setFormData({ ...formData, serviceType: category.id })}
-                      className={`p-6 rounded-lg border-2 transition-all ${formData.serviceType === category.id
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, serviceType: category.id });
+                        setErrors({ ...errors, serviceType: '' });
+                      }}
+                      className={`p-6 border-2 rounded-lg text-left transition-all ${
+                        formData.serviceType === category.id
                           ? 'border-indigo-600 bg-indigo-50'
                           : 'border-gray-200 hover:border-indigo-300'
-                        }`}
+                      }`}
                     >
-                      <Icon className="h-10 w-10 text-indigo-600 mb-3" />
-                      <p className="font-medium text-gray-900">{category.label}</p>
+                      <Icon className="h-8 w-8 text-indigo-600 mb-3" />
+                      <h3 className="font-semibold text-gray-900">{category.label}</h3>
                     </button>
                   );
                 })}
               </div>
-
-              {errors.serviceType && (
-                <p className="text-sm text-red-600 mt-2">{errors.serviceType}</p>
-              )}
             </div>
           )}
 
-          {/* Step 2: Personal Information (Display Only) */}
-          {currentStep === 2 && tempUserData && (
+          {/* Step 2: Personal Info (Display) */}
+          {currentStep === 2 && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Personal Information
               </h2>
-              <p className="text-sm text-gray-600 mb-6">
-                Information from your account
-              </p>
-
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="First Name"
-                    value={tempUserData.firstName}
-                    disabled
-                  />
-                  <Input
-                    label="Last Name"
-                    value={tempUserData.lastName}
-                    disabled
-                  />
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-700">Full Name:</span>
+                  <span className="text-sm text-gray-900">
+                    {tempUserData.fullName || `${tempUserData.firstName} ${tempUserData.lastName}`}
+                  </span>
                 </div>
-
-                <Input
-                  label="Email"
-                  value={tempUserData.email}
-                  disabled
-                />
-
-                <Input
-                  label="Phone Number"
-                  value={tempUserData.phoneNumber}
-                  disabled
-                />
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-700">Email:</span>
+                  <span className="text-sm text-gray-900">{tempUserData.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm font-medium text-gray-700">Phone:</span>
+                  <span className="text-sm text-gray-900">{tempUserData.phoneNumber}</span>
+                </div>
+                {tempUserData.address && (
+                  <div className="flex justify-between">
+                    <span className="text-sm font-medium text-gray-700">Address:</span>
+                    <span className="text-sm text-gray-900">{tempUserData.address}</span>
+                  </div>
+                )}
               </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start">
-                <svg className="h-5 w-5 text-blue-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm text-blue-800">
-                  These details are from your account and cannot be changed here.
-                </p>
-              </div>
+              <p className="text-sm text-gray-600 mt-4">
+                This information was provided during signup and cannot be changed here.
+              </p>
             </div>
           )}
 
@@ -508,17 +632,15 @@ const WorkerRegistrationFlow = () => {
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Business Information
+                <span className="text-sm font-normal text-gray-500 ml-2">(Optional)</span>
               </h2>
-              <p className="text-sm text-gray-600 mb-6">
-                This step is optional. You can skip if you don't have a registered business.
-              </p>
 
               <Input
                 label="Business Name"
                 name="businessName"
                 value={formData.businessName}
                 onChange={handleChange}
-                placeholder="ramod electric"
+                placeholder="e.g., ABC Plumbing Services"
               />
 
               <Input
@@ -526,40 +648,55 @@ const WorkerRegistrationFlow = () => {
                 name="businessAddress"
                 value={formData.businessAddress}
                 onChange={handleChange}
-                placeholder="loku road, big town"
+                placeholder="Street address"
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="City"
                   name="city"
                   value={formData.city}
                   onChange={handleChange}
-                  placeholder="kandy"
+                  placeholder="e.g., Colombo"
                 />
-                <Input
-                  label="State/Province"
-                  name="stateProvince"
-                  value={formData.stateProvince}
-                  onChange={handleChange}
-                  placeholder="sri lanka"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Province
+                  </label>
+                  <select
+                    name="stateProvince"
+                    value={formData.stateProvince}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="Western">Western</option>
+                    <option value="Central">Central</option>
+                    <option value="Southern">Southern</option>
+                    <option value="Northern">Northern</option>
+                    <option value="Eastern">Eastern</option>
+                    <option value="North Western">North Western</option>
+                    <option value="North Central">North Central</option>
+                    <option value="Uva">Uva</option>
+                    <option value="Sabaragamuwa">Sabaragamuwa</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Postal Code"
                   name="postalCode"
                   value={formData.postalCode}
                   onChange={handleChange}
-                  placeholder="1234"
+                  placeholder="e.g., 00100"
                 />
                 <Input
-                  label="Website (Optional)"
+                  label="Website"
                   name="website"
+                  type="url"
                   value={formData.website}
                   onChange={handleChange}
-                  placeholder="www.etric.com"
+                  placeholder="https://yourwebsite.com"
                 />
               </div>
             </div>
@@ -574,171 +711,153 @@ const WorkerRegistrationFlow = () => {
 
               <Input
                 label="Years of Experience"
-                type="number"
                 name="yearsOfExperience"
+                type="number"
                 value={formData.yearsOfExperience}
                 onChange={handleChange}
                 error={errors.yearsOfExperience}
-                placeholder="11"
+                placeholder="e.g., 5"
+                min="0"
                 required
               />
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Specializations <span className="text-red-500">*</span>
+                  Specializations *
                 </label>
-                <p className="text-sm text-gray-600 mb-3">
-                  Select all specializations that apply to your skills
-                </p>
-                <div className="flex flex-wrap gap-2">
+                {errors.specializations && (
+                  <p className="text-sm text-red-600 mb-2">{errors.specializations}</p>
+                )}
+                <div className="space-y-2">
                   {(specializationsByService[formData.serviceType] || []).map((spec) => (
-                    <button
-                      key={spec}
-                      type="button"
-                      onClick={() => handleArrayToggle('specializations', spec)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${formData.specializations.includes(spec)
-                          ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-600'
-                          : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:border-gray-300'
-                        }`}
-                    >
-                      {formData.specializations.includes(spec) && (
-                        <Check className="inline h-4 w-4 mr-1" />
-                      )}
-                      {spec}
-                    </button>
+                    <label key={spec} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.specializations.includes(spec)}
+                        onChange={() => handleArrayToggle('specializations', spec)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{spec}</span>
+                    </label>
                   ))}
                 </div>
-                {errors.specializations && (
-                  <p className="text-sm text-red-600 mt-2">{errors.specializations}</p>
-                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Languages Spoken
+                  Languages Spoken *
                 </label>
-                <div className="flex flex-wrap gap-2">
+                {errors.languagesSpoken && (
+                  <p className="text-sm text-red-600 mb-2">{errors.languagesSpoken}</p>
+                )}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                   {languages.map((lang) => (
-                    <button
-                      key={lang}
-                      type="button"
-                      onClick={() => handleArrayToggle('languagesSpoken', lang)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${formData.languagesSpoken.includes(lang)
-                          ? 'bg-indigo-100 text-indigo-700 border-2 border-indigo-600'
-                          : 'bg-gray-100 text-gray-700 border-2 border-transparent hover:border-gray-300'
-                        }`}
-                    >
-                      {formData.languagesSpoken.includes(lang) && (
-                        <Check className="inline h-4 w-4 mr-1" />
-                      )}
-                      {lang}
-                    </button>
+                    <label key={lang} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={formData.languagesSpoken.includes(lang)}
+                        onChange={() => handleArrayToggle('languagesSpoken', lang)}
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">{lang}</span>
+                    </label>
                   ))}
                 </div>
-                {errors.languagesSpoken && (
-                  <p className="text-sm text-red-600 mt-2">{errors.languagesSpoken}</p>
-                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Bio / Professional Summary <span className="text-red-500">*</span>
+                  Professional Bio *
                 </label>
+                {errors.bio && (
+                  <p className="text-sm text-red-600 mb-2">{errors.bio}</p>
+                )}
                 <textarea
                   name="bio"
                   value={formData.bio}
                   onChange={handleChange}
-                  rows={4}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="I am a skilled and reliable electrical technician with experience in repairing wiring systems and fixing power issues. I always focus on safety, quality, and customer satisfaction while completing my work efficiently"
+                  rows="5"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  placeholder="Tell potential customers about yourself, your experience, and what makes you stand out... (minimum 50 characters)"
                 />
                 <p className="text-sm text-gray-500 mt-1">
-                  {formData.bio.length} / 500 characters (minimum 50)
+                  {formData.bio.length}/50 characters minimum
                 </p>
-                {errors.bio && (
-                  <p className="text-sm text-red-600 mt-1">{errors.bio}</p>
-                )}
               </div>
             </div>
           )}
 
-          {/* Step 5: Service Area & Location */}
+          {/* Step 5: Service Area */}
           {currentStep === 5 && (
             <div className="space-y-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Location & Service Area
+                Service Area & Location
               </h2>
-              <p className="text-sm text-gray-600 mb-6">
-                Some information is from your account
-              </p>
 
               <Input
-                label="Address"
+                label="Service Address"
                 name="serviceAddress"
                 value={formData.serviceAddress}
                 onChange={handleChange}
                 error={errors.serviceAddress}
-                placeholder="loku road, big town"
+                placeholder="Where are you primarily based?"
                 required
               />
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
-                  label="City/Town"
+                  label="Service City"
                   name="serviceCity"
                   value={formData.serviceCity}
                   onChange={handleChange}
                   error={errors.serviceCity}
-                  placeholder="kandy"
+                  placeholder="e.g., Colombo"
+                  required
+                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service Province
+                  </label>
+                  <select
+                    name="serviceProvince"
+                    value={formData.serviceProvince}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  >
+                    <option value="Western">Western</option>
+                    <option value="Central">Central</option>
+                    <option value="Southern">Southern</option>
+                    <option value="Northern">Northern</option>
+                    <option value="Eastern">Eastern</option>
+                    <option value="North Western">North Western</option>
+                    <option value="North Central">North Central</option>
+                    <option value="Uva">Uva</option>
+                    <option value="Sabaragamuwa">Sabaragamuwa</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Postal Code"
+                  name="servicePostalCode"
+                  value={formData.servicePostalCode}
+                  onChange={handleChange}
+                  error={errors.servicePostalCode}
+                  placeholder="e.g., 00100"
                   required
                 />
                 <Input
-                  label="Province"
-                  name="serviceProvince"
-                  value={formData.serviceProvince}
+                  label="Service Radius (km)"
+                  name="serviceRadius"
+                  type="number"
+                  value={formData.serviceRadius}
                   onChange={handleChange}
-                  placeholder="sri lanka"
+                  error={errors.serviceRadius}
+                  placeholder="How far will you travel?"
+                  min="1"
                   required
                 />
-              </div>
-
-              <Input
-                label="Postal Code"
-                name="servicePostalCode"
-                value={formData.servicePostalCode}
-                onChange={handleChange}
-                error={errors.servicePostalCode}
-                placeholder="1234"
-                required
-              />
-
-              <Input
-                label="Service Radius (km)"
-                type="number"
-                name="serviceRadius"
-                value={formData.serviceRadius}
-                onChange={handleChange}
-                error={errors.serviceRadius}
-                helperText="How far are you willing to travel for jobs?"
-                placeholder="10"
-                required
-              />
-
-              <Input
-                label="Website (Optional)"
-                name="website"
-                value={formData.website}
-                onChange={handleChange}
-                placeholder="www.etric.com"
-              />
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start">
-                <svg className="h-5 w-5 text-blue-600 mt-0.5 mr-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-                </svg>
-                <p className="text-sm text-blue-800">
-                  Address and City are from your account. Please provide Province and Service Radius.
-                </p>
               </div>
             </div>
           )}
@@ -749,51 +868,52 @@ const WorkerRegistrationFlow = () => {
               <h2 className="text-xl font-semibold text-gray-900 mb-4">
                 Pricing
               </h2>
-              <p className="text-sm text-gray-600 mb-6">
-                Set your rates in Sri Lankan Rupees (LKR)
-              </p>
 
               <Input
                 label="Daily Wage (LKR)"
-                type="number"
                 name="dailyWage"
+                type="number"
                 value={formData.dailyWage}
                 onChange={handleChange}
                 error={errors.dailyWage}
-                placeholder="3000"
+                placeholder="e.g., 3000"
+                min="500"
                 required
               />
 
               <Input
                 label="Half Day Rate (LKR)"
-                type="number"
                 name="halfDayRate"
+                type="number"
                 value={formData.halfDayRate}
                 onChange={handleChange}
                 error={errors.halfDayRate}
-                placeholder="1500"
+                placeholder="e.g., 1800"
+                min="250"
                 required
               />
 
               <Input
                 label="Minimum Charge (LKR)"
-                type="number"
                 name="minimumCharge"
+                type="number"
                 value={formData.minimumCharge}
                 onChange={handleChange}
                 error={errors.minimumCharge}
-                placeholder="500"
+                placeholder="e.g., 1000"
+                min="100"
                 required
               />
 
               <Input
                 label="Overtime Hourly Rate (LKR)"
-                type="number"
                 name="overtimeHourlyRate"
+                type="number"
                 value={formData.overtimeHourlyRate}
                 onChange={handleChange}
                 error={errors.overtimeHourlyRate}
-                placeholder="400"
+                placeholder="e.g., 200"
+                min="50"
                 required
               />
             </div>
@@ -808,8 +928,11 @@ const WorkerRegistrationFlow = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Available Days
+                  Available Days *
                 </label>
+                {errors.availableDays && (
+                  <p className="text-sm text-red-600 mb-2">{errors.availableDays}</p>
+                )}
                 <div className="space-y-2">
                   {weekDays.map((day) => (
                     <label key={day} className="flex items-center">
@@ -995,7 +1118,7 @@ const WorkerRegistrationFlow = () => {
                   loading={loading}
                   disabled={loading}
                 >
-                  {loading ? 'Completing...' : 'Complete Registration'}
+                  {loading ? 'Completing Registration...' : 'Complete Registration'}
                 </Button>
               )}
             </div>
@@ -1003,7 +1126,7 @@ const WorkerRegistrationFlow = () => {
         </div>
 
         {/* Success Message */}
-        {currentStep === totalSteps && (
+        {currentStep === totalSteps && !registrationSuccess && (
           <div className="mt-6 bg-green-50 border border-green-200 rounded-lg p-4">
             <div className="flex items-center">
               <Check className="h-5 w-5 text-green-600 mr-3" />
