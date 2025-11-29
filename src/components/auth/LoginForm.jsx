@@ -70,6 +70,8 @@ const LoginForm = ({ onSuccess, onError }) => {
     setLoading(true);
 
     try {
+      console.log('🚀 Starting login...');
+      
       // Sign in with Firebase
       const userCredential = await signInWithEmailAndPassword(
         auth,
@@ -77,54 +79,84 @@ const LoginForm = ({ onSuccess, onError }) => {
         formData.password
       );
 
+      console.log('✅ Firebase authentication successful');
+
       // Get ID token
       const idToken = await userCredential.user.getIdToken();
+      console.log('✅ ID token obtained');
+
+      // Use VITE environment variable
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      console.log('🌐 API URL:', apiUrl);
 
       // Call backend API to verify and get user data
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/auth/login`, {
+      const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`,
         },
         body: JSON.stringify({
-          email: formData.email,
+          firebaseUid: userCredential.user.uid,
         }),
       });
 
+      console.log('📨 Response status:', response.status);
+
       const data = await response.json();
+      console.log('📦 Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.message || 'Login failed');
       }
 
+      // ✅ CRITICAL FIX: Extract user from correct location in response
+      // Backend sends: { success: true, message: '...', data: { user: {...} } }
+      const user = data.data?.user || data.user;
+      
+      if (!user) {
+        console.error('❌ No user data in response:', data);
+        throw new Error('Invalid response format - no user data');
+      }
+
+      console.log('👤 User data:', user);
+      console.log('🎭 User role:', user.role);
+
       // Store token and user data
       if (rememberMe) {
         localStorage.setItem('authToken', idToken);
-        localStorage.setItem('user', JSON.stringify(data.user));
+        localStorage.setItem('user', JSON.stringify(user));
       } else {
         sessionStorage.setItem('authToken', idToken);
-        sessionStorage.setItem('user', JSON.stringify(data.user));
+        sessionStorage.setItem('user', JSON.stringify(user));
       }
+
+      console.log('✅ Login successful!');
 
       // Call success callback
       if (onSuccess) {
-        onSuccess(data.user);
+        onSuccess(user);
       }
 
-      // Redirect based on user role
-      const { role } = data.user;
+      // ✅ CRITICAL FIX: Navigate based on user role
+      const { role } = user;
+      console.log('🧭 Navigating based on role:', role);
+      
       if (role === 'customer') {
+        console.log('→ Redirecting to customer dashboard');
         navigate('/customer/dashboard');
       } else if (role === 'worker') {
+        console.log('→ Redirecting to worker dashboard');
         navigate('/worker/dashboard');
       } else if (role === 'admin') {
+        console.log('→ Redirecting to admin dashboard');
         navigate('/admin/dashboard');
       } else {
+        console.log('→ Unknown role, redirecting to home');
         navigate('/');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       
       let errorMessage = 'An error occurred during login';
       
@@ -138,13 +170,15 @@ const LoginForm = ({ onSuccess, onError }) => {
       } else if (error.code === 'auth/user-disabled') {
         errorMessage = 'This account has been disabled';
       } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many login attempts. Please try again later';
+        errorMessage = 'Too many login attempts. Please try again later.';
+      } else if (error.code === 'auth/invalid-credential') {
+        errorMessage = 'Invalid email or password';
       } else if (error.message) {
         errorMessage = error.message;
       }
 
       setErrors({
-        general: errorMessage,
+        submit: errorMessage,
       });
 
       if (onError) {
@@ -160,16 +194,18 @@ const LoginForm = ({ onSuccess, onError }) => {
       <div className="bg-white rounded-lg shadow-md p-8">
         {/* Header */}
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-          <p className="text-gray-600">Sign in to your FixMate account</p>
+          <h2 className="text-3xl font-bold text-gray-900">Welcome Back</h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Sign in to your FixMate account
+          </p>
         </div>
 
-        {/* General error message */}
-        {errors.general && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+        {/* Error Alert */}
+        {errors.submit && (
+          <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 rounded">
             <div className="flex items-center">
               <svg
-                className="h-5 w-5 text-red-600 mr-2"
+                className="h-5 w-5 text-red-500 mr-2"
                 fill="currentColor"
                 viewBox="0 0 20 20"
               >
@@ -179,59 +215,35 @@ const LoginForm = ({ onSuccess, onError }) => {
                   clipRule="evenodd"
                 />
               </svg>
-              <p className="text-sm text-red-800">{errors.general}</p>
+              <p className="text-sm text-red-700">{errors.submit}</p>
             </div>
           </div>
         )}
 
-        {/* Login Form */}
+        {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Input */}
+          {/* Email */}
           <Input
+            label="Email Address"
             type="email"
             name="email"
-            label="Email Address"
             value={formData.email}
             onChange={handleChange}
             error={errors.email}
-            placeholder="Enter your email"
-            autoComplete="email"
+            placeholder="your.email@example.com"
             required
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
-                />
-              </svg>
-            }
-            iconPosition="left"
           />
 
-          {/* Password Input */}
+          {/* Password */}
           <Input
+            label="Password"
             type="password"
             name="password"
-            label="Password"
             value={formData.password}
             onChange={handleChange}
             error={errors.password}
             placeholder="Enter your password"
-            autoComplete="current-password"
             required
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
-              </svg>
-            }
-            iconPosition="left"
           />
 
           {/* Remember Me & Forgot Password */}
@@ -239,25 +251,28 @@ const LoginForm = ({ onSuccess, onError }) => {
             <div className="flex items-center">
               <input
                 id="remember-me"
+                name="remember-me"
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
               />
               <label
                 htmlFor="remember-me"
-                className="ml-2 block text-sm text-gray-700 cursor-pointer"
+                className="ml-2 block text-sm text-gray-900"
               >
                 Remember me
               </label>
             </div>
 
-            <Link
-              to="/forgot-password"
-              className="text-sm text-indigo-600 hover:text-indigo-800 font-medium"
-            >
-              Forgot password?
-            </Link>
+            <div className="text-sm">
+              <Link
+                to="/forgot-password"
+                className="font-medium text-indigo-600 hover:text-indigo-500"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </div>
 
           {/* Submit Button */}
@@ -266,9 +281,8 @@ const LoginForm = ({ onSuccess, onError }) => {
             variant="primary"
             fullWidth
             loading={loading}
-            disabled={loading}
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            Sign In
           </Button>
         </form>
 
@@ -279,7 +293,9 @@ const LoginForm = ({ onSuccess, onError }) => {
               <div className="w-full border-t border-gray-300" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">Or continue with</span>
+              <span className="px-2 bg-white text-gray-500">
+                Or continue with
+              </span>
             </div>
           </div>
         </div>
@@ -290,7 +306,7 @@ const LoginForm = ({ onSuccess, onError }) => {
             Don't have an account?{' '}
             <Link
               to="/signup"
-              className="text-indigo-600 hover:text-indigo-800 font-medium"
+              className="font-medium text-indigo-600 hover:text-indigo-500"
             >
               Sign up
             </Link>
