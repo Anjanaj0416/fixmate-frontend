@@ -8,6 +8,7 @@ import { User, Mail, Phone, MapPin } from 'lucide-react';
 /**
  * Basic Info Registration Component
  * First step of user registration - collects basic user information
+ * FIXED: Enhanced logging and validation
  */
 const BasicInfoRegistration = ({ onSuccess, onError }) => {
   const navigate = useNavigate();
@@ -118,6 +119,8 @@ const BasicInfoRegistration = ({ onSuccess, onError }) => {
     setLoading(true);
 
     try {
+      console.log('🚀 Starting Firebase registration...');
+      
       // Create user in Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -125,39 +128,75 @@ const BasicInfoRegistration = ({ onSuccess, onError }) => {
         formData.password
       );
 
+      console.log('✅ Firebase user created:', {
+        uid: userCredential.user.uid,
+        email: userCredential.user.email
+      });
+
       // Update profile with display name
       const fullName = `${formData.firstName} ${formData.lastName}`;
       await updateProfile(userCredential.user, {
         displayName: fullName,
       });
 
+      console.log('✅ Profile updated with name:', fullName);
+
       // Get ID token
       const idToken = await userCredential.user.getIdToken();
+      console.log('✅ ID token obtained');
 
-      // Store user data temporarily for account type selection
+      // ✅ CRITICAL: Store ALL required data
       const tempUserData = {
+        // Required fields
+        firebaseUid: userCredential.user.uid,     // ✅ MUST HAVE!
+        email: formData.email,
+        phoneNumber: formData.phoneNumber,
+        fullName: fullName,
+        
+        // Additional fields
         firstName: formData.firstName,
         lastName: formData.lastName,
         name: fullName,
-        email: formData.email,
-        phoneNumber: formData.phoneNumber,
         address: formData.address,
-        firebaseUid: userCredential.user.uid,
         idToken: idToken,
       };
 
-      // Store in session storage temporarily
+      console.log('💾 Saving temp user data:', {
+        firebaseUid: tempUserData.firebaseUid ? '✅ Present' : '❌ MISSING',
+        email: tempUserData.email,
+        phoneNumber: tempUserData.phoneNumber,
+        fullName: tempUserData.fullName,
+        hasToken: !!tempUserData.idToken
+      });
+
+      // Validate before saving
+      if (!tempUserData.firebaseUid) {
+        throw new Error('Firebase UID is missing! Cannot proceed.');
+      }
+
+      // Store in session storage
       sessionStorage.setItem('tempUserData', JSON.stringify(tempUserData));
+
+      // Verify it was saved
+      const savedData = sessionStorage.getItem('tempUserData');
+      const parsedData = JSON.parse(savedData);
+      console.log('✅ Verified saved data:', {
+        firebaseUid: parsedData.firebaseUid ? '✅ Saved' : '❌ NOT SAVED',
+        email: parsedData.email
+      });
 
       // Call success callback
       if (onSuccess) {
         onSuccess(tempUserData);
       }
 
+      console.log('🔄 Navigating to account type selection...');
+      
       // Navigate to account type selection
       navigate('/select-account-type');
+      
     } catch (error) {
-      console.error('Registration error:', error);
+      console.error('❌ Registration error:', error);
 
       let errorMessage = 'An error occurred during registration';
 

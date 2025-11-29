@@ -5,10 +5,9 @@ import { Button } from '../components/common';
 
 /**
  * Account Type Selection Component
- * Allows users to choose between Customer and Worker roles
- * FIXED: Proper backend registration with correct API endpoint
+ * CRITICAL FIX: Don't replace firebaseUid value with emoji in logs!
  */
-const AccountTypeSelection = () => {
+function AccountTypeSelection() {
   const navigate = useNavigate();
   const [selectedRole, setSelectedRole] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -16,11 +15,9 @@ const AccountTypeSelection = () => {
   const [tempUserData, setTempUserData] = useState(null);
 
   useEffect(() => {
-    // Get temporary user data from session storage
     const data = sessionStorage.getItem('tempUserData');
     
     if (!data) {
-      // No temp data, redirect to signup
       navigate('/signup');
       return;
     }
@@ -29,14 +26,13 @@ const AccountTypeSelection = () => {
       const parsedData = JSON.parse(data);
       setTempUserData(parsedData);
       
-      // Log for debugging
-      console.log('📋 Temp user data loaded:', {
-        email: parsedData.email,
-        hasToken: !!parsedData.idToken,
-        hasFirebaseUid: !!parsedData.firebaseUid
-      });
+      // Log WITHOUT modifying the actual data
+      console.log('✅ User data loaded');
+      console.log('Email:', parsedData.email);
+      console.log('Firebase UID:', parsedData.firebaseUid); // Show actual UID
+      console.log('Has Token:', !!parsedData.idToken);
     } catch (err) {
-      console.error('Error parsing temp user data:', err);
+      console.error('Error:', err);
       setError('Invalid registration data. Please start again.');
       setTimeout(() => navigate('/signup'), 3000);
     }
@@ -72,6 +68,7 @@ const AccountTypeSelection = () => {
   ];
 
   const handleRoleSelection = (role) => {
+    console.log('Selected role:', role);
     setSelectedRole(role);
     setError('');
   };
@@ -83,7 +80,14 @@ const AccountTypeSelection = () => {
     }
 
     if (!tempUserData) {
-      setError('Registration data not found. Please start registration again.');
+      setError('Registration data not found.');
+      return;
+    }
+
+    // ✅ CRITICAL: Check firebaseUid exists BEFORE sending
+    if (!tempUserData.firebaseUid) {
+      console.error('❌ Firebase UID is missing!');
+      setError('Firebase UID is missing. Please sign up again.');
       return;
     }
 
@@ -91,30 +95,33 @@ const AccountTypeSelection = () => {
     setError('');
 
     try {
-      console.log('🚀 Starting backend registration...');
-      console.log('Selected role:', selectedRole);
-      console.log('API URL:', import.meta.env.VITE_API_URL);
-
-      // Prepare registration data for backend
-      const registrationData = {
-        firebaseUid: tempUserData.firebaseUid,
-        email: tempUserData.email,
-        fullName: tempUserData.name,
-        phoneNumber: tempUserData.phoneNumber,
-        address: tempUserData.address,
-        role: selectedRole,
-      };
-
-      console.log('📤 Sending registration data:', {
-        ...registrationData,
-        hasToken: !!tempUserData.idToken
-      });
-
-      // Call backend API to create user in MongoDB
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
       const endpoint = `${apiUrl}/api/v1/auth/signup`;
       
-      console.log('📍 API Endpoint:', endpoint);
+      console.log('🚀 Starting registration...');
+      console.log('API:', endpoint);
+      console.log('Role:', selectedRole);
+
+      // ✅ CRITICAL FIX: Don't log objects that modify the data!
+      // Just send the actual values as-is
+      const registrationData = {
+        firebaseUid: tempUserData.firebaseUid,           // Send actual UID value
+        email: tempUserData.email,
+        phoneNumber: tempUserData.phoneNumber,
+        fullName: tempUserData.name || tempUserData.fullName || `${tempUserData.firstName} ${tempUserData.lastName}`,
+        role: selectedRole,
+        firstName: tempUserData.firstName,
+        lastName: tempUserData.lastName,
+        address: tempUserData.address,
+      };
+
+      // Log for debugging (but don't modify the values!)
+      console.log('📤 Sending registration data:');
+      console.log('  firebaseUid:', registrationData.firebaseUid);
+      console.log('  email:', registrationData.email);
+      console.log('  phoneNumber:', registrationData.phoneNumber);
+      console.log('  fullName:', registrationData.fullName);
+      console.log('  role:', registrationData.role);
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -125,46 +132,44 @@ const AccountTypeSelection = () => {
         body: JSON.stringify(registrationData)
       });
 
-      console.log('📥 Response status:', response.status);
+      console.log('📨 Response status:', response.status);
 
       const data = await response.json();
-      console.log('📥 Response data:', data);
+      console.log('📦 Response data:', data);
 
       if (!response.ok) {
         throw new Error(data.message || `Registration failed: ${response.status}`);
       }
 
-      // Registration successful
+      // Success!
       console.log('✅ Registration successful!');
-      console.log('User created:', data.data?.user || data.user);
 
-      // Store auth token and user data
-      sessionStorage.setItem('authToken', tempUserData.idToken);
+      sessionStorage.setItem('authToken', data.token || tempUserData.idToken);
       sessionStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
-
-      // Clear temporary data
       sessionStorage.removeItem('tempUserData');
 
-      // Redirect based on role
+      // Navigate based on role
       if (selectedRole === 'customer') {
-        console.log('➡️ Redirecting to customer dashboard');
         navigate('/customer/dashboard');
       } else if (selectedRole === 'worker') {
-        console.log('➡️ Redirecting to worker registration flow');
         navigate('/worker-registration');
       }
 
     } catch (err) {
       console.error('❌ Registration error:', err);
       
-      let errorMessage = 'Registration failed. Please try again.';
+      let errorMessage = 'Registration failed. ';
       
-      if (err.message.includes('Failed to fetch')) {
-        errorMessage = 'Cannot connect to server. Please check if the backend is running on port 5001.';
+      if (err.message.includes('Failed to fetch') || err.message.includes('fetch')) {
+        errorMessage = 'Cannot connect to server. Please check if backend is running on port 5001.';
+      } else if (err.message.includes('firebaseUid')) {
+        errorMessage = 'Firebase UID is missing. Please sign up again.';
+      } else if (err.message.includes('validation failed')) {
+        errorMessage = 'Validation error: ' + err.message;
       } else if (err.message.includes('already exists')) {
         errorMessage = 'This account already exists. Please login instead.';
-      } else if (err.message) {
-        errorMessage = err.message;
+      } else {
+        errorMessage += err.message;
       }
       
       setError(errorMessage);
@@ -193,7 +198,7 @@ const AccountTypeSelection = () => {
             Choose Your Account Type
           </h1>
           <p className="text-lg text-gray-600">
-            Welcome, {tempUserData.name}! How would you like to use FixMate?
+            Welcome, {tempUserData.name || `${tempUserData.firstName} ${tempUserData.lastName}`}! How would you like to use FixMate?
           </p>
         </div>
 
@@ -221,62 +226,44 @@ const AccountTypeSelection = () => {
                   relative bg-white rounded-2xl shadow-lg p-8 cursor-pointer
                   transition-all duration-300 transform hover:scale-105
                   ${isSelected 
-                    ? `ring-4 ring-${type.color}-500 ring-opacity-50 shadow-2xl` 
+                    ? 'ring-4 ring-indigo-500 ring-opacity-50 shadow-2xl' 
                     : 'hover:shadow-xl'
                   }
                 `}
               >
-                {/* Selection Indicator */}
                 {isSelected && (
                   <div className="absolute top-4 right-4">
-                    <CheckCircle className={`h-8 w-8 text-${type.color}-600`} />
+                    <CheckCircle className="h-8 w-8 text-indigo-600" />
                   </div>
                 )}
 
-                {/* Icon */}
                 <div className={`
                   inline-flex items-center justify-center w-16 h-16 rounded-full mb-6
-                  ${isSelected 
-                    ? `bg-${type.color}-100` 
-                    : 'bg-gray-100'
-                  }
+                  ${isSelected ? 'bg-indigo-100' : 'bg-gray-100'}
                 `}>
-                  <Icon className={`
-                    h-8 w-8 
-                    ${isSelected 
-                      ? `text-${type.color}-600` 
-                      : 'text-gray-600'
-                    }
-                  `} />
+                  <Icon className={`h-8 w-8 ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`} />
                 </div>
 
-                {/* Title */}
                 <h3 className="text-2xl font-bold text-gray-900 mb-3">
                   {type.title}
                 </h3>
 
-                {/* Description */}
                 <p className="text-gray-600 mb-6">
                   {type.description}
                 </p>
 
-                {/* Features */}
                 <ul className="space-y-3">
                   {type.features.map((feature, index) => (
                     <li key={index} className="flex items-start">
                       <CheckCircle className={`
                         h-5 w-5 mr-3 mt-0.5 flex-shrink-0
-                        ${isSelected 
-                          ? `text-${type.color}-600` 
-                          : 'text-gray-400'
-                        }
+                        ${isSelected ? 'text-indigo-600' : 'text-gray-400'}
                       `} />
                       <span className="text-gray-700">{feature}</span>
                     </li>
                   ))}
                 </ul>
 
-                {/* Select Button */}
                 <div className="mt-8">
                   <Button
                     variant={isSelected ? 'primary' : 'outline'}
@@ -307,7 +294,6 @@ const AccountTypeSelection = () => {
             {loading ? 'Creating Account...' : 'Continue'}
           </Button>
 
-          {/* Back to Signup */}
           <div className="text-center mt-6">
             <button
               onClick={() => navigate('/signup')}
@@ -318,20 +304,22 @@ const AccountTypeSelection = () => {
           </div>
         </div>
 
-        {/* Debug Info (remove in production) */}
-        {process.env.NODE_ENV === 'development' && (
+        {/* Debug Info */}
+        {import.meta.env.DEV && (
           <div className="mt-8 p-4 bg-gray-100 rounded-lg text-xs font-mono max-w-2xl mx-auto">
             <div className="font-bold mb-2">Debug Info:</div>
             <div>Email: {tempUserData.email}</div>
+            <div>Firebase UID: {tempUserData.firebaseUid || '❌ MISSING'}</div>
             <div>Has Token: {tempUserData.idToken ? 'Yes' : 'No'}</div>
-            <div>Has Firebase UID: {tempUserData.firebaseUid ? 'Yes' : 'No'}</div>
-            <div>API URL: {import.meta.env.VITE_API_URL || 'Not set'}</div>
+            <div>Phone: {tempUserData.phoneNumber}</div>
+            <div>Name: {tempUserData.name || `${tempUserData.firstName} ${tempUserData.lastName}`}</div>
+            <div>API URL: {import.meta.env.VITE_API_URL || 'http://localhost:5001 (default)'}</div>
             <div>Selected Role: {selectedRole || 'None'}</div>
           </div>
         )}
       </div>
     </div>
   );
-};
+}
 
 export default AccountTypeSelection;
