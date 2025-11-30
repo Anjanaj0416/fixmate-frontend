@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle } from 'lucide-react';
 
 /**
- * Enhanced Worker Dashboard Component
- * Main dashboard with sign-out button for workers
+ * Worker Dashboard Component - FIXED
+ * Calculates profile completion from worker profile data
  */
 const WorkerDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [profileCompletion, setProfileCompletion] = useState(0);
   const [dashboardData, setDashboardData] = useState({
     stats: {
       pendingRequests: 0,
@@ -19,27 +20,82 @@ const WorkerDashboard = () => {
     recentBookings: [],
     upcomingJobs: [],
     notifications: [],
-    profileCompletion: 0,
   });
 
   useEffect(() => {
     fetchDashboardData();
   }, []);
 
+  const calculateProfileCompletion = (worker) => {
+    if (!worker) return 0;
+    
+    const fields = [
+      worker.userId?.fullName || worker.fullName,
+      worker.userId?.email || worker.email,
+      worker.userId?.phoneNumber || worker.phoneNumber,
+      worker.serviceCategories?.length > 0,
+      worker.specializations?.length > 0,
+      worker.experience > 0,
+      worker.hourlyRate > 0,
+      worker.bio,
+      worker.skills?.length > 0,
+      worker.userId?.location?.address || worker.address
+    ];
+    
+    const filledFields = fields.filter(Boolean).length;
+    return Math.round((filledFields / fields.length) * 100);
+  };
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
-      const response = await fetch(`${API_URL}/workers/dashboard`, {
-        headers: {
-          'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
-        },
-      });
+      const token = localStorage.getItem('fixmate_auth_token');
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      
+      // Fetch worker profile to calculate completion
+      try {
+        const profileResponse = await fetch(`${API_BASE_URL}/api/v1/workers/profile`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        setDashboardData(data.data);
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json();
+          if (profileData.success && profileData.data) {
+            const completion = calculateProfileCompletion(profileData.data);
+            console.log('📊 Calculated profile completion:', completion + '%');
+            setProfileCompletion(completion);
+          }
+        }
+      } catch (profileError) {
+        console.error('Error fetching profile for completion:', profileError);
+        // Fallback: try to calculate from localStorage
+        const userStr = localStorage.getItem('fixmate_user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          const completion = calculateProfileCompletion(user);
+          setProfileCompletion(completion);
+        }
       }
+
+      // Try to fetch dashboard stats (may not exist yet)
+      try {
+        const dashboardResponse = await fetch(`${API_BASE_URL}/api/v1/workers/dashboard`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+
+        if (dashboardResponse.ok) {
+          const data = await dashboardResponse.json();
+          setDashboardData(data.data);
+        }
+      } catch (dashboardError) {
+        console.log('Dashboard endpoint not available, using defaults');
+      }
+      
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
     } finally {
@@ -50,55 +106,38 @@ const WorkerDashboard = () => {
   const handleSignOut = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
-        
-        // Call backend logout endpoint
-        await fetch(`${API_URL}/auth/logout`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fcmToken: sessionStorage.getItem('fcmToken') || null,
-          }),
-        });
-      } catch (error) {
-        console.error('Logout error:', error);
-      } finally {
-        // Clear session storage
-        sessionStorage.removeItem('authToken');
-        sessionStorage.removeItem('user');
-        sessionStorage.removeItem('fcmToken');
-        
-        // Navigate to login page
+        localStorage.removeItem('fixmate_user');
+        localStorage.removeItem('fixmate_auth_token');
         navigate('/login');
+      } catch (error) {
+        console.error('Error signing out:', error);
       }
     }
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+          <p className="text-gray-600">Loading dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
-
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header with Sign Out Button */}
+      {/* Header */}
       <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">Worker Dashboard</h1>
             <button
               onClick={handleSignOut}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
             >
-              <LogOut className="w-4 h-4 mr-2" />
+              <LogOut className="w-4 h-4" />
               Sign Out
             </button>
           </div>
@@ -106,37 +145,43 @@ const WorkerDashboard = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Header */}
+        {/* Welcome Section */}
         <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 rounded-lg p-6 text-white mb-6">
-          <h2 className="text-3xl font-bold mb-2">
-            Welcome back, {user.fullName || user.name}!
-          </h2>
+          <h2 className="text-3xl font-bold mb-2">Welcome back, !</h2>
           <p className="text-indigo-100">
             Here's what's happening with your business today
           </p>
         </div>
 
         {/* Profile Completion Alert */}
-        {dashboardData.profileCompletion < 100 && (
+        {profileCompletion < 100 && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
             <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <AlertCircle className="h-6 w-6 text-yellow-400 mr-3" />
-                <div>
+              <div className="flex items-center flex-1">
+                <AlertCircle className="w-6 h-6 text-yellow-400 mr-3 flex-shrink-0" />
+                <div className="flex-1">
                   <p className="text-sm font-medium text-yellow-800">
                     Complete your profile to get more bookings!
                   </p>
                   <p className="text-sm text-yellow-700 mt-1">
-                    Your profile is {dashboardData.profileCompletion}% complete
+                    Your profile is {profileCompletion}% complete
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => navigate('/worker/profile')}
-                className="bg-yellow-400 hover:bg-yellow-500 text-yellow-900 px-4 py-2 rounded-md text-sm font-medium transition-colors"
+                className="ml-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap"
               >
                 Complete Profile
               </button>
+            </div>
+            <div className="mt-3">
+              <div className="w-full bg-yellow-200 rounded-full h-2">
+                <div
+                  className="bg-yellow-600 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${profileCompletion}%` }}
+                />
+              </div>
             </div>
           </div>
         )}
@@ -194,7 +239,7 @@ const WorkerDashboard = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Monthly Earnings</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
-                  LKR {dashboardData.stats.monthlyEarnings.toLocaleString()}
+                  LKR {dashboardData.stats.monthlyEarnings}
                 </p>
               </div>
               <div className="bg-indigo-100 rounded-full p-3">
@@ -204,22 +249,25 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Activity and Quick Actions */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Recent Bookings */}
-          <div className="lg:col-span-2 bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Recent Booking Requests</h3>
-            {dashboardData.recentBookings.length > 0 ? (
-              <div className="space-y-3">
+        {/* Recent Booking Requests */}
+        <div className="bg-white rounded-lg shadow mb-6">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Recent Booking Requests</h3>
+          </div>
+          <div className="p-6">
+            {dashboardData.recentBookings && dashboardData.recentBookings.length > 0 ? (
+              <div className="space-y-4">
                 {dashboardData.recentBookings.map((booking) => (
-                  <div
-                    key={booking.id}
-                    className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/worker/jobs/${booking.id}`)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-semibold">{booking.serviceType}</span>
-                      <span className={`px-2 py-1 text-xs rounded-full ${
+                  <div key={booking._id} className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h4 className="font-medium text-gray-900">{booking.serviceType}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{booking.description}</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {new Date(booking.createdAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                         booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
                         booking.status === 'accepted' ? 'bg-green-100 text-green-800' :
                         'bg-gray-100 text-gray-800'
@@ -227,80 +275,48 @@ const WorkerDashboard = () => {
                         {booking.status}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">{booking.location?.city}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {new Date(booking.createdAt).toLocaleDateString()}
-                    </p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-600 text-center py-8">No recent bookings</p>
+              <div className="text-center py-8 text-gray-500">
+                No recent bookings
+              </div>
             )}
           </div>
+        </div>
 
-          {/* Quick Actions */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h3>
-            <div className="space-y-2">
+        {/* Quick Actions */}
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <button
                 onClick={() => navigate('/worker/profile')}
-                className="w-full text-left px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors flex items-center"
+                className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700 transition-colors"
               >
-                <User className="w-5 h-5 text-gray-600 mr-3" />
-                <span>Edit Profile</span>
+                <User className="w-5 h-5" />
+                Edit Profile
               </button>
               <button
-                onClick={() => navigate('/worker/portfolio')}
-                className="w-full text-left px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors flex items-center"
+                onClick={() => navigate('/worker/jobs')}
+                className="flex items-center justify-center gap-2 bg-gray-600 text-white px-4 py-3 rounded-lg hover:bg-gray-700 transition-colors"
               >
-                <Briefcase className="w-5 h-5 text-gray-600 mr-3" />
-                <span>Manage Portfolio</span>
+                <Briefcase className="w-5 h-5" />
+                View All Jobs
               </button>
               <button
                 onClick={() => navigate('/worker/earnings')}
-                className="w-full text-left px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors flex items-center"
+                className="flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 transition-colors"
               >
-                <DollarSign className="w-5 h-5 text-gray-600 mr-3" />
-                <span>View Earnings</span>
-              </button>
-              <button
-                onClick={() => navigate('/worker/availability')}
-                className="w-full text-left px-4 py-3 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors flex items-center"
-              >
-                <Calendar className="w-5 h-5 text-gray-600 mr-3" />
-                <span>Update Availability</span>
+                <DollarSign className="w-5 h-5" />
+                View Earnings
               </button>
             </div>
           </div>
         </div>
-
-        {/* Upcoming Jobs */}
-        {dashboardData.upcomingJobs.length > 0 && (
-          <div className="mt-6 bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Upcoming Jobs</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {dashboardData.upcomingJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/worker/jobs/${job.id}`)}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-sm">{job.serviceType}</span>
-                    <span className="text-xs text-gray-500">
-                      {new Date(job.scheduledDate).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-600">{job.location?.city}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
