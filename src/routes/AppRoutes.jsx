@@ -34,6 +34,11 @@ import Users from '../pages/admin/Users';
 import Reports from '../pages/admin/Reports';
 import Settings from '../pages/admin/Settings';
 
+// Quote Request Flow Components
+import QuoteRequestFlow from '../pages/QuoteRequestFlow';
+import WorkerSelectionPage from '../pages/WorkerSelectionPage';
+import ServiceSelectionPage from '../pages/ServiceSelectionPage';
+
 /**
  * App Routes Component
  * Defines all application routes with proper authentication and role-based access
@@ -60,6 +65,42 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
+
+      {/* IMPORTANT: Quote Request Routes - MUST come BEFORE /customer/find-workers */}
+      <Route
+        path="/customer/service-selection"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <ServiceSelectionPage />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/customer/quote-request"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <QuoteRequestFlow />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/customer/select-worker"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <WorkerSelectionPage />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      {/* Other Customer Routes */}
       <Route
         path="/customer/find-workers"
         element={
