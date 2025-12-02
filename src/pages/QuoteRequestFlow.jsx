@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Upload, MapPin, Calendar, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MapPin, Calendar, AlertCircle } from 'lucide-react';
 import { getAuth } from 'firebase/auth';
-import storage from '../utils/storage'; // ← ADD THIS IMPORT
+import storage from '../utils/storage';
+import apiService from '../services/apiService'; // ✅ NEW IMPORT
+import locationService from '../services/locationService'; // ✅ NEW IMPORT
+import ImageUpload from '../components/quote/ImageUpload'; // ✅ NEW IMPORT
 
 /**
  * Quote Request Flow Component
  * Multi-step form for customers to create quote requests
  * 
- * ✅ FIXED: Proper token retrieval using storage utility
- * ✅ FIXED: Firebase fallback for token
- * ✅ FIXED: Better error handling
+ * ✅ FIXED: Uses apiService for automatic token refresh
+ * ✅ FIXED: Uses locationService for GPS capture
+ * ✅ FIXED: Uses ImageUpload component for photos
+ * ✅ FIXED: Proper Base64 image handling
  */
 const QuoteRequestFlow = () => {
   const navigate = useNavigate();
@@ -28,23 +32,11 @@ const QuoteRequestFlow = () => {
     issueLocation: '',
     serviceDate: '',
     urgency: 'normal',
-    budgetRange: {
-      min: '',
-      max: ''
-    },
-    problemImages: [],
-    customerLocation: {
-      address: '',
-      city: '',
-      coordinates: {
-        latitude: null,
-        longitude: null
-      }
-    },
+    budgetRange: '',
+    problemImages: [], // Will hold image objects with base64
+    customerLocation: null, // Will be set by locationService
     contactPhone: ''
   });
-
-  const [imagePreview, setImagePreview] = useState([]);
 
   const locationOptions = [
     'Kitchen',
@@ -57,6 +49,22 @@ const QuoteRequestFlow = () => {
     'Other'
   ];
 
+  const urgencyOptions = [
+    { value: 'low', label: 'Low - Within a week' },
+    { value: 'normal', label: 'Normal - Within 2-3 days' },
+    { value: 'high', label: 'High - Within 24 hours' },
+    { value: 'emergency', label: 'Emergency - ASAP' }
+  ];
+
+  const budgetOptions = [
+    '1000-3000',
+    '3000-5000',
+    '5000-10000',
+    '10000-20000',
+    '20000+'
+  ];
+
+  // Load user data on mount
   useEffect(() => {
     if (!selectedCategory) {
       navigate('/customer/service-selection');
@@ -64,149 +72,101 @@ const QuoteRequestFlow = () => {
     }
     
     loadUserData();
-    getCurrentLocation();
-  }, []);
+  }, [selectedCategory, navigate]);
+
+  // ✅ NEW: Capture GPS location when reaching Step 3
+  useEffect(() => {
+    if (currentStep === 3 && !formData.customerLocation) {
+      captureLocation();
+    }
+  }, [currentStep]);
 
   const loadUserData = () => {
-    // ✅ FIX: Use storage utility
     const user = storage.getUserData();
     
     if (user) {
       setFormData(prev => ({
         ...prev,
-        contactPhone: user.phoneNumber || '',
-        customerLocation: {
-          ...prev.customerLocation,
-          address: user.location?.address || '',
-          city: user.location?.city || ''
-        }
+        contactPhone: user.phoneNumber || ''
       }));
     }
   };
 
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setFormData(prev => ({
-            ...prev,
-            customerLocation: {
-              ...prev.customerLocation,
-              coordinates: {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude
-              }
-            }
-          }));
-          console.log('✅ GPS location captured:', {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.error('❌ Error getting location:', error);
+  // ✅ NEW: GPS location capture function
+  const captureLocation = async () => {
+    try {
+      console.log('📍 Capturing GPS location...');
+      
+      const result = await locationService.getLocationWithFallback();
+      
+      if (result.success) {
+        setFormData(prev => ({
+          ...prev,
+          customerLocation: result.location
+        }));
+        console.log('✅ Location captured:', result.location);
+        
+        // Clear any previous location errors
+        if (errors.location) {
+          setErrors(prev => ({ ...prev, location: '' }));
         }
-      );
+      } else {
+        // Location capture failed, show error
+        setErrors(prev => ({
+          ...prev,
+          location: result.error
+        }));
+      }
+    } catch (error) {
+      console.error('Location error:', error);
+      setErrors(prev => ({
+        ...prev,
+        location: 'Could not get your location. Please ensure location permissions are enabled.'
+      }));
     }
   };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     
-    if (name.startsWith('budgetRange.')) {
-      const field = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        budgetRange: {
-          ...prev.budgetRange,
-          [field]: value
-        }
-      }));
-    } else if (name.startsWith('customerLocation.')) {
-      const field = name.split('.')[1];
-      setFormData(prev => ({
-        ...prev,
-        customerLocation: {
-          ...prev.customerLocation,
-          [field]: value
-        }
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
 
+    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    
-    if (files.length + formData.problemImages.length > 5) {
-      setErrors(prev => ({
-        ...prev,
-        images: 'Maximum 5 images allowed'
-      }));
-      return;
-    }
-
-    const newPreviews = files.map(file => URL.createObjectURL(file));
-    setImagePreview(prev => [...prev, ...newPreviews]);
-
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({
-          ...prev,
-          problemImages: [...prev.problemImages, reader.result]
-        }));
-      };
-      reader.readAsDataURL(file);
-    });
-
-    if (errors.images) {
-      setErrors(prev => ({ ...prev, images: '' }));
-    }
-  };
-
-  const removeImage = (index) => {
-    setImagePreview(prev => prev.filter((_, i) => i !== index));
-    setFormData(prev => ({
-      ...prev,
-      problemImages: prev.problemImages.filter((_, i) => i !== index)
-    }));
-  };
-
-  const validateStep = (step) => {
+  const validateStep = () => {
     const newErrors = {};
 
-    if (step === 1) {
+    if (currentStep === 1) {
       if (!formData.serviceType) {
         newErrors.serviceType = 'Please select a service type';
       }
     }
 
-    if (step === 2) {
+    if (currentStep === 2) {
       if (!formData.problemDescription || formData.problemDescription.length < 20) {
-        newErrors.problemDescription = 'Please provide detailed description (min 20 characters)';
+        newErrors.problemDescription = 'Please provide a detailed description (minimum 20 characters)';
       }
       if (!formData.issueLocation) {
-        newErrors.issueLocation = 'Please select where the service is needed';
+        newErrors.issueLocation = 'Please specify where the issue is located';
+      }
+      if (!formData.serviceDate) {
+        newErrors.serviceDate = 'Please select a preferred service date';
+      }
+      if (!formData.budgetRange) {
+        newErrors.budgetRange = 'Please select a budget range';
       }
     }
 
-    if (step === 3) {
-      if (!formData.serviceDate) {
-        newErrors.serviceDate = 'Please select preferred date';
-      }
-      if (!formData.budgetRange.min || !formData.budgetRange.max) {
-        newErrors.budgetRange = 'Please provide budget range';
-      } else if (parseFloat(formData.budgetRange.min) >= parseFloat(formData.budgetRange.max)) {
-        newErrors.budgetRange = 'Maximum budget must be greater than minimum';
+    if (currentStep === 3) {
+      if (!formData.customerLocation) {
+        newErrors.location = 'Location is required to find nearby workers';
       }
     }
 
@@ -214,13 +174,15 @@ const QuoteRequestFlow = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
-      if (currentStep < 4) {
-        setCurrentStep(currentStep + 1);
-      } else {
-        handleSubmit();
-      }
+  const handleNext = async () => {
+    if (!validateStep()) {
+      return;
+    }
+
+    if (currentStep < 4) {
+      setCurrentStep(currentStep + 1);
+    } else {
+      await handleSubmit();
     }
   };
 
@@ -228,84 +190,51 @@ const QuoteRequestFlow = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     } else {
-      navigate('/customer/service-selection');
+      navigate(-1);
     }
   };
 
-  // ✅ FIXED SUBMIT FUNCTION
+  // ✅ UPDATED: Handle submit with Base64 images and proper location
   const handleSubmit = async () => {
     setLoading(true);
     setErrors({});
 
     try {
-      console.log('📝 Submitting quote request...');
-      
-      // ✅ FIX 1: Get token using storage utility with Firebase fallback
-      let token = storage.getAuthToken();
-      
-      // ✅ FIX 2: If no token in storage, get fresh token from Firebase
-      if (!token) {
-        console.log('⚠️ No token in storage, getting fresh token from Firebase...');
-        const auth = getAuth();
-        const currentUser = auth.currentUser;
-        
-        if (!currentUser) {
-          throw new Error('Not authenticated. Please login again.');
-        }
-        
-        token = await currentUser.getIdToken(true); // Force refresh
-        console.log('✅ Got fresh token from Firebase');
-        
-        // Store it for future use
-        storage.saveAuthToken(token);
-      }
-      
-      if (!token) {
-        throw new Error('Authentication token not found. Please login again.');
-      }
+      console.log('📤 Submitting quote request...');
 
-      console.log('🔐 Using auth token (length:', token.length, ')');
-      
-      // ✅ FIX 3: Proper API URL construction
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const endpoint = `${API_URL}/api/v1/bookings/quote-request`;
-      
-      console.log('🌐 Sending request to:', endpoint);
-      
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
+      // ✅ Prepare Base64 images for MongoDB
+      const imageData = formData.problemImages.map((img) => img.base64);
+
+      // ✅ Prepare request data
+      const requestData = {
+        serviceType: formData.serviceType,
+        problemDescription: formData.problemDescription,
+        issueLocation: formData.issueLocation,
+        serviceDate: formData.serviceDate,
+        urgency: formData.urgency,
+        budgetRange: formData.budgetRange,
+        problemImages: imageData, // ✅ Send as Base64 array
+        customerLocation: formData.customerLocation, // ✅ GPS location object
+        contactPhone: formData.contactPhone,
+      };
+
+      console.log('Request data prepared:', {
+        serviceType: requestData.serviceType,
+        imageCount: requestData.problemImages.length,
+        hasLocation: !!requestData.customerLocation,
       });
 
-      // ✅ FIX 4: Better error handling
-      console.log('📡 Response status:', response.status);
+      // ✅ Use apiService (handles token refresh automatically)
+      const response = await apiService.post(
+        '/api/v1/bookings/quote-request',
+        requestData
+      );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          message: 'Failed to create quote request'
-        }));
+        const errorData = await response.json();
         
-        console.error('❌ API Error:', {
-          status: response.status,
-          message: errorData.message,
-          error: errorData
-        });
-        
-        // Specific error messages based on status
         if (response.status === 401) {
-          // Token might be expired, try to get fresh one
-          console.log('🔄 Token expired, getting fresh token...');
-          const auth = getAuth();
-          if (auth.currentUser) {
-            const freshToken = await auth.currentUser.getIdToken(true);
-            storage.saveAuthToken(freshToken);
-            throw new Error('Session expired. Please try again.');
-          }
-          throw new Error('Invalid token. Please login again.');
+          throw new Error('Session expired. Please login again.');
         } else if (response.status === 403) {
           throw new Error('Access denied. Please check your permissions.');
         } else if (response.status === 500) {
@@ -378,7 +307,10 @@ const QuoteRequestFlow = () => {
           {/* General Error */}
           {errors.general && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-800">{errors.general}</p>
+              <div className="flex items-start gap-3">
+                <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-red-800">{errors.general}</p>
+              </div>
             </div>
           )}
 
@@ -389,23 +321,24 @@ const QuoteRequestFlow = () => {
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
                   What service do you need?
                 </h2>
-                <p className="text-gray-600 text-sm mb-4">
-                  Service: <span className="font-medium text-indigo-600">{selectedCategory?.name}</span>
+                <p className="text-sm text-gray-600 mb-4">
+                  You selected: <span className="font-medium">{selectedCategory?.name}</span>
                 </p>
+                <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                  <p className="text-indigo-900 font-medium">{selectedCategory?.name}</p>
+                  <p className="text-sm text-indigo-700 mt-1">{selectedCategory?.description}</p>
+                </div>
               </div>
             </div>
           )}
 
-          {/* Step 2: Details & Location */}
+          {/* Step 2: Problem Details */}
           {currentStep === 2 && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Describe your problem
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  Describe Your Problem
                 </h2>
-                <p className="text-gray-600 text-sm mb-4">
-                  Provide details to help workers understand your needs
-                </p>
               </div>
 
               {/* Problem Description */}
@@ -413,61 +346,45 @@ const QuoteRequestFlow = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Problem Description <span className="text-red-500">*</span>
                 </label>
-                {errors.problemDescription && (
-                  <p className="text-sm text-red-600 mb-2">{errors.problemDescription}</p>
-                )}
                 <textarea
                   name="problemDescription"
                   value={formData.problemDescription}
                   onChange={handleChange}
                   rows={5}
-                  maxLength={500}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent resize-none"
-                  placeholder="Describe the problem in detail. Include any relevant information that will help workers provide accurate quotes..."
+                  placeholder="Please describe the issue in detail. Include when it started, what you've noticed, and any relevant information..."
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                    errors.problemDescription ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 />
-                <p className="text-sm text-gray-500 mt-1">
-                  {formData.problemDescription.length}/500 characters
+                {errors.problemDescription && (
+                  <p className="mt-1 text-sm text-red-600">{errors.problemDescription}</p>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  {formData.problemDescription.length}/1000 characters
                 </p>
               </div>
 
               {/* Issue Location */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Where is the service needed? <span className="text-red-500">*</span>
+                  Where is the issue located? <span className="text-red-500">*</span>
                 </label>
-                {errors.issueLocation && (
-                  <p className="text-sm text-red-600 mb-2">{errors.issueLocation}</p>
-                )}
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {locationOptions.map((location) => (
-                    <button
-                      key={location}
-                      type="button"
-                      onClick={() => setFormData(prev => ({ ...prev, issueLocation: location }))}
-                      className={`px-4 py-3 rounded-lg border-2 transition-colors ${
-                        formData.issueLocation === location
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {location}
-                    </button>
+                <select
+                  name="issueLocation"
+                  value={formData.issueLocation}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                    errors.issueLocation ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Select location</option>
+                  {locationOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
                   ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Step 3: Date & Budget */}
-          {currentStep === 3 && (
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  When & Budget
-                </h2>
-                <p className="text-gray-600 text-sm mb-4">
-                  Select your preferred date and budget range
-                </p>
+                </select>
+                {errors.issueLocation && (
+                  <p className="mt-1 text-sm text-red-600">{errors.issueLocation}</p>
+                )}
               </div>
 
               {/* Service Date */}
@@ -475,37 +392,37 @@ const QuoteRequestFlow = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Preferred Service Date <span className="text-red-500">*</span>
                 </label>
+                <input
+                  type="date"
+                  name="serviceDate"
+                  value={formData.serviceDate}
+                  onChange={handleChange}
+                  min={getMinDate()}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                    errors.serviceDate ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                />
                 {errors.serviceDate && (
-                  <p className="text-sm text-red-600 mb-2">{errors.serviceDate}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.serviceDate}</p>
                 )}
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="date"
-                    name="serviceDate"
-                    value={formData.serviceDate}
-                    onChange={handleChange}
-                    min={getMinDate()}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-                  />
-                </div>
               </div>
 
               {/* Urgency */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Urgency
+                  Urgency Level
                 </label>
                 <select
                   name="urgency"
                   value={formData.urgency}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                 >
-                  <option value="low">Low - Can wait a few days</option>
-                  <option value="normal">Normal - Within a week</option>
-                  <option value="high">High - ASAP</option>
-                  <option value="emergency">Emergency - Immediate</option>
+                  {urgencyOptions.map(option => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -514,149 +431,212 @@ const QuoteRequestFlow = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Budget Range (LKR) <span className="text-red-500">*</span>
                 </label>
+                <select
+                  name="budgetRange"
+                  value={formData.budgetRange}
+                  onChange={handleChange}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 ${
+                    errors.budgetRange ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Select budget range</option>
+                  {budgetOptions.map(option => (
+                    <option key={option} value={option}>LKR {option}</option>
+                  ))}
+                </select>
                 {errors.budgetRange && (
-                  <p className="text-sm text-red-600 mb-2">{errors.budgetRange}</p>
+                  <p className="mt-1 text-sm text-red-600">{errors.budgetRange}</p>
                 )}
-                <div className="grid grid-cols-2 gap-4">
-                  <input
-                    type="number"
-                    name="budgetRange.min"
-                    value={formData.budgetRange.min}
-                    onChange={handleChange}
-                    placeholder="Min"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-                  />
-                  <input
-                    type="number"
-                    name="budgetRange.max"
-                    value={formData.budgetRange.max}
-                    onChange={handleChange}
-                    placeholder="Max"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-                  />
-                </div>
               </div>
 
-              {/* Photo Upload */}
+              {/* Contact Phone */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Upload Photos (Optional)
+                  Contact Phone Number
                 </label>
-                <p className="text-sm text-gray-500 mb-3">
-                  Add photos to help workers understand the problem better (Max 5)
-                </p>
-                {errors.images && (
-                  <p className="text-sm text-red-600 mb-2">{errors.images}</p>
-                )}
-                
-                {imagePreview.length < 5 && (
-                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      <Upload className="w-10 h-10 mb-2 text-gray-400" />
-                      <p className="text-sm text-gray-500">Click to upload photos</p>
-                    </div>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                  </label>
-                )}
+                <input
+                  type="tel"
+                  name="contactPhone"
+                  value={formData.contactPhone}
+                  onChange={handleChange}
+                  placeholder="+94 XX XXX XXXX"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+              </div>
+            </div>
+          )}
 
-                {/* Image Preview */}
-                {imagePreview.length > 0 && (
-                  <div className="grid grid-cols-3 gap-4 mt-4">
-                    {imagePreview.map((preview, index) => (
-                      <div key={index} className="relative">
-                        <img
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-24 object-cover rounded-lg"
-                        />
+          {/* Step 3: Photos & Location - ✅ UPDATED */}
+          {currentStep === 3 && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  Upload Problem Photos
+                </h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  Photos help workers understand the problem better and provide accurate quotes.
+                </p>
+                {/* ✅ NEW: Use ImageUpload component */}
+                <ImageUpload
+                  images={formData.problemImages}
+                  setImages={(images) => setFormData({ ...formData, problemImages: images })}
+                  maxImages={5}
+                />
+              </div>
+
+              {/* ✅ NEW: Location Display */}
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                  Your Location
+                </h2>
+                <p className="text-sm text-gray-600 mb-4">
+                  We need your location to find nearby workers.
+                </p>
+                
+                {formData.customerLocation ? (
+                  // Location captured successfully
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <MapPin size={20} className="text-green-600 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-900">
+                          Location captured successfully
+                        </p>
+                        <p className="text-xs text-green-700 mt-1">
+                          {formData.customerLocation.address?.full || 
+                           `${formData.customerLocation.coordinates.latitude.toFixed(4)}, ${formData.customerLocation.coordinates.longitude.toFixed(4)}`}
+                        </p>
                         <button
+                          onClick={captureLocation}
                           type="button"
-                          onClick={() => removeImage(index)}
-                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                          className="text-xs text-green-700 underline mt-2 hover:text-green-800"
                         >
-                          <X size={16} />
+                          Update location
                         </button>
                       </div>
-                    ))}
+                    </div>
+                  </div>
+                ) : (
+                  // Location not captured yet or failed
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <MapPin size={20} className="text-yellow-600 flex-shrink-0 mt-1" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-yellow-900">
+                          Getting your location...
+                        </p>
+                        {errors.location && (
+                          <p className="text-xs text-yellow-700 mt-1">
+                            {errors.location}
+                          </p>
+                        )}
+                        <button
+                          onClick={captureLocation}
+                          type="button"
+                          className="text-sm text-yellow-700 underline mt-2 hover:text-yellow-800"
+                        >
+                          Try again
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Step 4: Review */}
+          {/* Step 4: Review & Confirm */}
           {currentStep === 4 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
                   Review & Confirm
                 </h2>
-                <p className="text-gray-600 text-sm mb-4">
+                <p className="text-sm text-gray-600 mb-6">
                   Please review your request before submitting
                 </p>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-                <div>
+              <div className="space-y-4">
+                {/* Service Type */}
+                <div className="pb-4 border-b border-gray-200">
                   <p className="text-sm text-gray-600">Service Type</p>
-                  <p className="font-medium text-gray-900">{selectedCategory?.name}</p>
+                  <p className="text-base font-medium text-gray-900">{selectedCategory?.name}</p>
                 </div>
 
-                <div>
-                  <p className="text-sm text-gray-600">Location</p>
-                  <p className="font-medium text-gray-900">{formData.issueLocation}</p>
-                </div>
-
-                <div>
+                {/* Problem Description */}
+                <div className="pb-4 border-b border-gray-200">
                   <p className="text-sm text-gray-600">Description</p>
-                  <p className="font-medium text-gray-900">{formData.problemDescription}</p>
+                  <p className="text-base text-gray-900">{formData.problemDescription}</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Location */}
+                <div className="pb-4 border-b border-gray-200">
+                  <p className="text-sm text-gray-600">Issue Location</p>
+                  <p className="text-base font-medium text-gray-900">{formData.issueLocation}</p>
+                </div>
+
+                {/* Date & Urgency */}
+                <div className="pb-4 border-b border-gray-200 grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-600">Preferred Date</p>
-                    <p className="font-medium text-gray-900">{formData.serviceDate}</p>
+                    <p className="text-sm text-gray-600">Service Date</p>
+                    <p className="text-base font-medium text-gray-900">
+                      {new Date(formData.serviceDate).toLocaleDateString()}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Urgency</p>
-                    <p className="font-medium text-gray-900 capitalize">{formData.urgency}</p>
+                    <p className="text-base font-medium text-gray-900 capitalize">{formData.urgency}</p>
                   </div>
                 </div>
 
-                <div>
+                {/* Budget */}
+                <div className="pb-4 border-b border-gray-200">
                   <p className="text-sm text-gray-600">Budget Range</p>
-                  <p className="font-medium text-gray-900">
-                    LKR {formData.budgetRange.min} - {formData.budgetRange.max}
-                  </p>
+                  <p className="text-base font-medium text-gray-900">LKR {formData.budgetRange}</p>
                 </div>
 
+                {/* Photos */}
                 {formData.problemImages.length > 0 && (
-                  <div>
+                  <div className="pb-4 border-b border-gray-200">
                     <p className="text-sm text-gray-600 mb-2">Photos ({formData.problemImages.length})</p>
-                    <div className="grid grid-cols-4 gap-2">
-                      {imagePreview.map((preview, index) => (
+                    <div className="grid grid-cols-3 gap-2">
+                      {formData.problemImages.map((img, index) => (
                         <img
-                          key={index}
-                          src={preview}
-                          alt={`Preview ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
+                          key={img.id}
+                          src={img.base64}
+                          alt={`Problem ${index + 1}`}
+                          className="w-full h-24 object-cover rounded-lg border border-gray-200"
                         />
                       ))}
                     </div>
                   </div>
                 )}
+
+                {/* GPS Location */}
+                {formData.customerLocation && (
+                  <div className="pb-4 border-b border-gray-200">
+                    <p className="text-sm text-gray-600">Your Location</p>
+                    <p className="text-base text-gray-900">
+                      {formData.customerLocation.address?.full || 'Location captured'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Contact */}
+                {formData.contactPhone && (
+                  <div>
+                    <p className="text-sm text-gray-600">Contact Phone</p>
+                    <p className="text-base font-medium text-gray-900">{formData.contactPhone}</p>
+                  </div>
+                )}
               </div>
 
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm text-blue-800">
-                  <strong>Next Steps:</strong> After submitting, we'll show you available workers in your area. 
-                  You can view their profiles and send your quote request to workers you prefer.
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4 mt-6">
+                <p className="text-sm text-indigo-900">
+                  <strong>Next Steps:</strong> After submitting, you'll see a list of available workers 
+                  near your location. You can view their profiles and send your quote request to 
+                  workers you prefer.
                 </p>
               </div>
             </div>
@@ -667,7 +647,8 @@ const QuoteRequestFlow = () => {
             <button
               type="button"
               onClick={handleBack}
-              className="flex items-center gap-2 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              disabled={loading}
+              className="flex items-center gap-2 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ArrowLeft size={20} />
               Back
