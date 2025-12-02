@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, requestNotificationPermission } from '../config/firebase';
 import authService from '../services/authService';
+import storage from '../utils/storage'; // ← ADD THIS IMPORT
 
 // Create Context
 export const AuthContext = createContext();
@@ -16,8 +17,8 @@ export const AuthContext = createContext();
  * Auth Provider Component
  * Manages authentication state and operations
  * 
- * FIXED: Immediate state updates for navigation
- * FIXED: Proper localStorage/sessionStorage handling
+ * ✅ FIXED: Using storage utility for consistent token management
+ * ✅ FIXED: Proper token storage in both localStorage and sessionStorage
  */
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -31,44 +32,32 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Check both localStorage and sessionStorage
-        const token = localStorage.getItem('fixmate_auth_token') || 
-                     sessionStorage.getItem('fixmate_auth_token');
-        const userDataStr = localStorage.getItem('fixmate_user') || 
-                           sessionStorage.getItem('fixmate_user');
+        // ✅ FIX: Use storage utility
+        const token = storage.getAuthToken();
+        const savedUser = storage.getUserData();
 
         console.log('🔍 Initializing auth...');
         console.log('Token found:', !!token);
-        console.log('User data found:', !!userDataStr);
+        console.log('User data found:', !!savedUser);
 
-        if (token && userDataStr) {
-          try {
-            const savedUser = JSON.parse(userDataStr);
-            console.log('✅ Loaded user from storage:', savedUser.email, 'Role:', savedUser.role);
-            
-            // Set user immediately
-            setUser(savedUser);
-            
-            // Verify token in background
-            authService.verifyTokenWithBackend(token)
-              .then(response => {
-                if (!response.success) {
-                  console.log('⚠️ Token invalid, clearing storage');
-                  localStorage.removeItem('fixmate_auth_token');
-                  localStorage.removeItem('fixmate_user');
-                  sessionStorage.removeItem('fixmate_auth_token');
-                  sessionStorage.removeItem('fixmate_user');
-                  setUser(null);
-                }
-              })
-              .catch(err => {
-                console.warn('Token verification failed:', err);
-              });
-          } catch (parseError) {
-            console.error('Error parsing user data:', parseError);
-            localStorage.removeItem('fixmate_user');
-            sessionStorage.removeItem('fixmate_user');
-          }
+        if (token && savedUser) {
+          console.log('✅ Loaded user from storage:', savedUser.email, 'Role:', savedUser.role);
+          
+          // Set user immediately
+          setUser(savedUser);
+          
+          // Verify token in background
+          authService.verifyTokenWithBackend(token)
+            .then(response => {
+              if (!response.success) {
+                console.log('⚠️ Token invalid, clearing storage');
+                storage.clearAllAuthData();
+                setUser(null);
+              }
+            })
+            .catch(err => {
+              console.warn('Token verification failed:', err);
+            });
         } else {
           console.log('ℹ️ No auth data found in storage');
         }
@@ -100,8 +89,10 @@ export function AuthProvider({ children }) {
             const userData = response.user || response.data?.user;
             console.log('✅ Synced Firebase user to context:', userData.email);
             setUser(userData);
-            localStorage.setItem('fixmate_user', JSON.stringify(userData));
-            localStorage.setItem('fixmate_auth_token', idToken);
+            
+            // ✅ FIX: Use storage utility
+            storage.saveUserData(userData);
+            storage.saveAuthToken(idToken);
           }
         } catch (error) {
           console.error('Error syncing Firebase user:', error);
@@ -110,10 +101,9 @@ export function AuthProvider({ children }) {
         // User signed out from Firebase
         console.log('🚪 User signed out');
         setUser(null);
-        localStorage.removeItem('fixmate_auth_token');
-        localStorage.removeItem('fixmate_user');
-        sessionStorage.removeItem('fixmate_auth_token');
-        sessionStorage.removeItem('fixmate_user');
+        
+        // ✅ FIX: Use storage utility
+        storage.clearAllAuthData();
       }
     });
 
@@ -138,13 +128,16 @@ export function AuthProvider({ children }) {
       if (response.user) {
         const userData = response.user || response.backendUser;
         setUser(userData);
-        localStorage.setItem('fixmate_user', JSON.stringify(userData));
-        localStorage.setItem('fixmate_auth_token', idToken);
+        
+        // ✅ FIX: Use storage utility (automatically stores in both storages)
+        storage.saveUserData(userData);
+        storage.saveAuthToken(idToken);
 
         // Request notification permission
         try {
           const fcmToken = await requestNotificationPermission();
           if (fcmToken) {
+            storage.saveFCMToken(fcmToken);
             await authService.updateFCMToken(fcmToken);
           }
         } catch (fcmError) {
@@ -181,8 +174,10 @@ export function AuthProvider({ children }) {
       if (response.success && response.user) {
         const userData = response.user;
         setUser(userData);
-        localStorage.setItem('fixmate_user', JSON.stringify(userData));
-        localStorage.setItem('fixmate_auth_token', idToken);
+        
+        // ✅ FIX: Use storage utility
+        storage.saveUserData(userData);
+        storage.saveAuthToken(idToken);
 
         return { success: true, user: userData };
       } else {
@@ -212,10 +207,10 @@ export function AuthProvider({ children }) {
       await signOut(auth);
       setUser(null);
       setFirebaseUser(null);
-      localStorage.removeItem('fixmate_auth_token');
-      localStorage.removeItem('fixmate_user');
-      sessionStorage.removeItem('fixmate_auth_token');
-      sessionStorage.removeItem('fixmate_user');
+      
+      // ✅ FIX: Use storage utility
+      storage.clearAllAuthData();
+      
       return { success: true };
     } catch (error) {
       const errorMessage = error.message || 'Logout failed';
@@ -250,7 +245,10 @@ export function AuthProvider({ children }) {
   const updateUser = useCallback((userData) => {
     console.log('🔄 updateUser called with:', userData.email, 'Role:', userData.role);
     setUser(userData);
-    localStorage.setItem('fixmate_user', JSON.stringify(userData));
+    
+    // ✅ FIX: Use storage utility
+    storage.saveUserData(userData);
+    
     console.log('✅ User state and storage updated');
   }, []);
 
@@ -259,15 +257,17 @@ export function AuthProvider({ children }) {
    */
   const refreshUser = async () => {
     try {
-      const token = localStorage.getItem('fixmate_auth_token') || 
-                   sessionStorage.getItem('fixmate_auth_token');
+      // ✅ FIX: Use storage utility
+      const token = storage.getAuthToken();
       if (!token) return;
 
       const response = await authService.verifyTokenWithBackend(token);
       if (response.success && response.user) {
         const userData = response.user;
         setUser(userData);
-        localStorage.setItem('fixmate_user', JSON.stringify(userData));
+        
+        // ✅ FIX: Use storage utility
+        storage.saveUserData(userData);
       }
     } catch (error) {
       console.error('Error refreshing user:', error);
@@ -285,11 +285,11 @@ export function AuthProvider({ children }) {
     resetPassword,
     updateUser,
     refreshUser,
-    isAuthenticated: !!user, // Boolean, not a function!
+    isAuthenticated: !!user,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // Default export for backwards compatibility
-export default AuthProvider;  
+export default AuthProvider;

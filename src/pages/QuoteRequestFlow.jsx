@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, ArrowRight, Upload, MapPin, Calendar, X } from 'lucide-react';
+import { getAuth } from 'firebase/auth';
+import storage from '../utils/storage'; // ← ADD THIS IMPORT
 
 /**
  * Quote Request Flow Component
  * Multi-step form for customers to create quote requests
  * 
- * Flow: Service Type → Details & Location → Date & Photos → Review → Worker Selection
+ * ✅ FIXED: Proper token retrieval using storage utility
+ * ✅ FIXED: Firebase fallback for token
+ * ✅ FIXED: Better error handling
  */
 const QuoteRequestFlow = () => {
   const navigate = useNavigate();
@@ -21,7 +25,7 @@ const QuoteRequestFlow = () => {
   const [formData, setFormData] = useState({
     serviceType: selectedCategory?.id || '',
     problemDescription: '',
-    issueLocation: '', // Kitchen, Bathroom, Living room, etc.
+    issueLocation: '',
     serviceDate: '',
     urgency: 'normal',
     budgetRange: {
@@ -42,7 +46,6 @@ const QuoteRequestFlow = () => {
 
   const [imagePreview, setImagePreview] = useState([]);
 
-  // Room/location options
   const locationOptions = [
     'Kitchen',
     'Bathroom',
@@ -54,9 +57,7 @@ const QuoteRequestFlow = () => {
     'Other'
   ];
 
-  // Load user data and get GPS location on mount
   useEffect(() => {
-    // Redirect if no category selected
     if (!selectedCategory) {
       navigate('/customer/service-selection');
       return;
@@ -67,7 +68,9 @@ const QuoteRequestFlow = () => {
   }, []);
 
   const loadUserData = () => {
-    const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+    // ✅ FIX: Use storage utility
+    const user = storage.getUserData();
+    
     if (user) {
       setFormData(prev => ({
         ...prev,
@@ -95,11 +98,13 @@ const QuoteRequestFlow = () => {
               }
             }
           }));
-          console.log('✅ GPS location captured:', position.coords);
+          console.log('✅ GPS location captured:', {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
         },
         (error) => {
           console.error('❌ Error getting location:', error);
-          // Continue without GPS - it's optional
         }
       );
     }
@@ -133,50 +138,47 @@ const QuoteRequestFlow = () => {
       }));
     }
 
-    // Clear error for this field
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
-  const handleImageUpload = async (e) => {
+  const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     
     if (files.length + formData.problemImages.length > 5) {
-      setErrors({ images: 'Maximum 5 images allowed' });
+      setErrors(prev => ({
+        ...prev,
+        images: 'Maximum 5 images allowed'
+      }));
       return;
     }
 
-    // Convert images to base64 for upload
-    const imagePromises = files.map(file => {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+    const newPreviews = files.map(file => URL.createObjectURL(file));
+    setImagePreview(prev => [...prev, ...newPreviews]);
+
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData(prev => ({
+          ...prev,
+          problemImages: [...prev.problemImages, reader.result]
+        }));
+      };
+      reader.readAsDataURL(file);
     });
 
-    try {
-      const base64Images = await Promise.all(imagePromises);
-      setFormData(prev => ({
-        ...prev,
-        problemImages: [...prev.problemImages, ...base64Images]
-      }));
-      setImagePreview(prev => [...prev, ...base64Images]);
+    if (errors.images) {
       setErrors(prev => ({ ...prev, images: '' }));
-    } catch (error) {
-      console.error('Error uploading images:', error);
-      setErrors({ images: 'Failed to upload images' });
     }
   };
 
   const removeImage = (index) => {
+    setImagePreview(prev => prev.filter((_, i) => i !== index));
     setFormData(prev => ({
       ...prev,
       problemImages: prev.problemImages.filter((_, i) => i !== index)
     }));
-    setImagePreview(prev => prev.filter((_, i) => i !== index));
   };
 
   const validateStep = (step) => {
@@ -230,28 +232,95 @@ const QuoteRequestFlow = () => {
     }
   };
 
+  // ✅ FIXED SUBMIT FUNCTION
   const handleSubmit = async () => {
     setLoading(true);
+    setErrors({});
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/v1/bookings/quote-request`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`
-          },
-          body: JSON.stringify(formData)
+      console.log('📝 Submitting quote request...');
+      
+      // ✅ FIX 1: Get token using storage utility with Firebase fallback
+      let token = storage.getAuthToken();
+      
+      // ✅ FIX 2: If no token in storage, get fresh token from Firebase
+      if (!token) {
+        console.log('⚠️ No token in storage, getting fresh token from Firebase...');
+        const auth = getAuth();
+        const currentUser = auth.currentUser;
+        
+        if (!currentUser) {
+          throw new Error('Not authenticated. Please login again.');
         }
-      );
+        
+        token = await currentUser.getIdToken(true); // Force refresh
+        console.log('✅ Got fresh token from Firebase');
+        
+        // Store it for future use
+        storage.saveAuthToken(token);
+      }
+      
+      if (!token) {
+        throw new Error('Authentication token not found. Please login again.');
+      }
+
+      console.log('🔐 Using auth token (length:', token.length, ')');
+      
+      // ✅ FIX 3: Proper API URL construction
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const endpoint = `${API_URL}/api/v1/bookings/quote-request`;
+      
+      console.log('🌐 Sending request to:', endpoint);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(formData)
+      });
+
+      // ✅ FIX 4: Better error handling
+      console.log('📡 Response status:', response.status);
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Failed to create quote request');
+        const errorData = await response.json().catch(() => ({
+          message: 'Failed to create quote request'
+        }));
+        
+        console.error('❌ API Error:', {
+          status: response.status,
+          message: errorData.message,
+          error: errorData
+        });
+        
+        // Specific error messages based on status
+        if (response.status === 401) {
+          // Token might be expired, try to get fresh one
+          console.log('🔄 Token expired, getting fresh token...');
+          const auth = getAuth();
+          if (auth.currentUser) {
+            const freshToken = await auth.currentUser.getIdToken(true);
+            storage.saveAuthToken(freshToken);
+            throw new Error('Session expired. Please try again.');
+          }
+          throw new Error('Invalid token. Please login again.');
+        } else if (response.status === 403) {
+          throw new Error('Access denied. Please check your permissions.');
+        } else if (response.status === 500) {
+          throw new Error('Server error. Please try again later.');
+        }
+        
+        throw new Error(errorData.message || 'Failed to create quote request');
       }
 
       const data = await response.json();
+      
+      if (!data.success || !data.quoteRequest) {
+        throw new Error('Invalid response from server');
+      }
+      
       setQuoteRequestId(data.quoteRequest._id);
 
       console.log('✅ Quote request created:', data.quoteRequest._id);
@@ -280,7 +349,7 @@ const QuoteRequestFlow = () => {
   };
 
   if (!selectedCategory) {
-    return null; // Will redirect in useEffect
+    return null;
   }
 
   return (
@@ -313,7 +382,7 @@ const QuoteRequestFlow = () => {
             </div>
           )}
 
-          {/* Step 1: Service Type (pre-selected) */}
+          {/* Step 1: Service Type */}
           {currentStep === 1 && (
             <div className="space-y-6">
               <div>
@@ -321,53 +390,22 @@ const QuoteRequestFlow = () => {
                   What service do you need?
                 </h2>
                 <p className="text-gray-600 text-sm mb-4">
-                  Selected service category
+                  Service: <span className="font-medium text-indigo-600">{selectedCategory?.name}</span>
                 </p>
-              </div>
-
-              <div className="p-4 border-2 border-indigo-600 rounded-lg bg-indigo-50">
-                <h3 className="font-semibold text-indigo-900 text-lg">{selectedCategory.name}</h3>
-                <p className="text-sm text-indigo-700 mt-1">{selectedCategory.description}</p>
               </div>
             </div>
           )}
 
-          {/* Step 2: Location & Details */}
+          {/* Step 2: Details & Location */}
           {currentStep === 2 && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 mb-2">
-                  Location & Details
+                  Describe your problem
                 </h2>
                 <p className="text-gray-600 text-sm mb-4">
-                  Tell us about your problem and where it's located
+                  Provide details to help workers understand your needs
                 </p>
-              </div>
-
-              {/* Issue Location */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Where is the {selectedCategory.name.toLowerCase()} service needed? <span className="text-red-500">*</span>
-                </label>
-                {errors.issueLocation && (
-                  <p className="text-sm text-red-600 mb-2">{errors.issueLocation}</p>
-                )}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {locationOptions.map((loc) => (
-                    <button
-                      key={loc}
-                      type="button"
-                      onClick={() => handleChange({ target: { name: 'issueLocation', value: loc } })}
-                      className={`p-3 border-2 rounded-lg text-sm font-medium transition-all ${
-                        formData.issueLocation === loc
-                          ? 'border-indigo-600 bg-indigo-50 text-indigo-900'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      {loc}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {/* Problem Description */}
@@ -382,19 +420,45 @@ const QuoteRequestFlow = () => {
                   name="problemDescription"
                   value={formData.problemDescription}
                   onChange={handleChange}
-                  rows={6}
+                  rows={5}
                   maxLength={500}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-                  placeholder="Describe your problem in detail. Include any relevant information that will help workers provide accurate quotes..."
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent resize-none"
+                  placeholder="Describe the problem in detail. Include any relevant information that will help workers provide accurate quotes..."
                 />
                 <p className="text-sm text-gray-500 mt-1">
                   {formData.problemDescription.length}/500 characters
                 </p>
               </div>
+
+              {/* Issue Location */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Where is the service needed? <span className="text-red-500">*</span>
+                </label>
+                {errors.issueLocation && (
+                  <p className="text-sm text-red-600 mb-2">{errors.issueLocation}</p>
+                )}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {locationOptions.map((location) => (
+                    <button
+                      key={location}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, issueLocation: location }))}
+                      className={`px-4 py-3 rounded-lg border-2 transition-colors ${
+                        formData.issueLocation === location
+                          ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      {location}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
-          {/* Step 3: Date & Photos */}
+          {/* Step 3: Date & Budget */}
           {currentStep === 3 && (
             <div className="space-y-6">
               <div>
@@ -438,9 +502,10 @@ const QuoteRequestFlow = () => {
                   onChange={handleChange}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 >
+                  <option value="low">Low - Can wait a few days</option>
                   <option value="normal">Normal - Within a week</option>
-                  <option value="urgent">Urgent - Within 2-3 days</option>
-                  <option value="emergency">Emergency - Same day</option>
+                  <option value="high">High - ASAP</option>
+                  <option value="emergency">Emergency - Immediate</option>
                 </select>
               </div>
 
@@ -458,8 +523,7 @@ const QuoteRequestFlow = () => {
                     name="budgetRange.min"
                     value={formData.budgetRange.min}
                     onChange={handleChange}
-                    placeholder="Minimum"
-                    min="0"
+                    placeholder="Min"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                   />
                   <input
@@ -467,8 +531,7 @@ const QuoteRequestFlow = () => {
                     name="budgetRange.max"
                     value={formData.budgetRange.max}
                     onChange={handleChange}
-                    placeholder="Maximum"
-                    min="0"
+                    placeholder="Max"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                   />
                 </div>
@@ -477,29 +540,45 @@ const QuoteRequestFlow = () => {
               {/* Photo Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Problem Photos (Optional)
+                  Upload Photos (Optional)
                 </label>
                 <p className="text-sm text-gray-500 mb-3">
-                  Upload photos to help workers understand the problem (Max 5 images)
+                  Add photos to help workers understand the problem better (Max 5)
                 </p>
                 {errors.images && (
                   <p className="text-sm text-red-600 mb-2">{errors.images}</p>
                 )}
+                
+                {imagePreview.length < 5 && (
+                  <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer hover:bg-gray-50">
+                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                      <Upload className="w-10 h-10 mb-2 text-gray-400" />
+                      <p className="text-sm text-gray-500">Click to upload photos</p>
+                    </div>
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                )}
 
                 {/* Image Preview */}
                 {imagePreview.length > 0 && (
-                  <div className="grid grid-cols-3 gap-3 mb-4">
-                    {imagePreview.map((img, index) => (
+                  <div className="grid grid-cols-3 gap-4 mt-4">
+                    {imagePreview.map((preview, index) => (
                       <div key={index} className="relative">
                         <img
-                          src={img}
-                          alt={`Problem ${index + 1}`}
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
                           className="w-full h-24 object-cover rounded-lg"
                         />
                         <button
                           type="button"
                           onClick={() => removeImage(index)}
-                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                          className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
                         >
                           <X size={16} />
                         </button>
@@ -507,30 +586,11 @@ const QuoteRequestFlow = () => {
                     ))}
                   </div>
                 )}
-
-                {/* Upload Button */}
-                {formData.problemImages.length < 5 && (
-                  <label className="flex items-center justify-center w-full p-6 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
-                    <div className="text-center">
-                      <Upload className="mx-auto h-8 w-8 text-gray-400" />
-                      <p className="mt-2 text-sm text-gray-600">
-                        Click to upload images
-                      </p>
-                    </div>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleImageUpload}
-                      className="hidden"
-                    />
-                  </label>
-                )}
               </div>
             </div>
           )}
 
-          {/* Step 4: Review & Confirm */}
+          {/* Step 4: Review */}
           {currentStep === 4 && (
             <div className="space-y-6">
               <div>
@@ -544,51 +604,47 @@ const QuoteRequestFlow = () => {
 
               <div className="bg-gray-50 rounded-lg p-6 space-y-4">
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Service Type</h3>
-                  <p className="text-gray-900 font-medium">{selectedCategory.name}</p>
+                  <p className="text-sm text-gray-600">Service Type</p>
+                  <p className="font-medium text-gray-900">{selectedCategory?.name}</p>
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Location</h3>
-                  <p className="text-gray-900">{formData.issueLocation}</p>
+                  <p className="text-sm text-gray-600">Location</p>
+                  <p className="font-medium text-gray-900">{formData.issueLocation}</p>
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Description</h3>
-                  <p className="text-gray-900 text-sm">{formData.problemDescription}</p>
+                  <p className="text-sm text-gray-600">Description</p>
+                  <p className="font-medium text-gray-900">{formData.problemDescription}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Preferred Date</h3>
-                    <p className="text-gray-900">
-                      {new Date(formData.serviceDate).toLocaleDateString()}
-                    </p>
+                    <p className="text-sm text-gray-600">Preferred Date</p>
+                    <p className="font-medium text-gray-900">{formData.serviceDate}</p>
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500">Urgency</h3>
-                    <p className="text-gray-900 capitalize">{formData.urgency}</p>
+                    <p className="text-sm text-gray-600">Urgency</p>
+                    <p className="font-medium text-gray-900 capitalize">{formData.urgency}</p>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-sm font-medium text-gray-500">Budget Range</h3>
-                  <p className="text-gray-900">
+                  <p className="text-sm text-gray-600">Budget Range</p>
+                  <p className="font-medium text-gray-900">
                     LKR {formData.budgetRange.min} - {formData.budgetRange.max}
                   </p>
                 </div>
 
                 {formData.problemImages.length > 0 && (
                   <div>
-                    <h3 className="text-sm font-medium text-gray-500 mb-2">
-                      Photos ({formData.problemImages.length})
-                    </h3>
-                    <div className="grid grid-cols-3 gap-2">
-                      {imagePreview.map((img, index) => (
+                    <p className="text-sm text-gray-600 mb-2">Photos ({formData.problemImages.length})</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      {imagePreview.map((preview, index) => (
                         <img
                           key={index}
-                          src={img}
-                          alt={`Problem ${index + 1}`}
+                          src={preview}
+                          alt={`Preview ${index + 1}`}
                           className="w-full h-20 object-cover rounded"
                         />
                       ))}
@@ -599,9 +655,8 @@ const QuoteRequestFlow = () => {
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Next Steps:</strong> After submitting, we'll show you available workers
-                  in your area. You can view their profiles and send your quote request to the
-                  workers you prefer.
+                  <strong>Next Steps:</strong> After submitting, we'll show you available workers in your area. 
+                  You can view their profiles and send your quote request to workers you prefer.
                 </p>
               </div>
             </div>
@@ -610,26 +665,29 @@ const QuoteRequestFlow = () => {
           {/* Navigation Buttons */}
           <div className="flex gap-4 mt-8">
             <button
+              type="button"
               onClick={handleBack}
-              className="flex-1 flex items-center justify-center gap-2 px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-              disabled={loading}
+              className="flex items-center gap-2 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <ArrowLeft size={20} />
               Back
             </button>
+            
             <button
+              type="button"
               onClick={handleNext}
               disabled={loading}
               className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
-                'Processing...'
-              ) : currentStep === 4 ? (
-                'Find Workers'
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Submitting...
+                </>
               ) : (
                 <>
-                  Continue
-                  <ArrowRight size={20} />
+                  {currentStep === 4 ? 'Submit Request' : 'Next'}
+                  {currentStep < 4 && <ArrowRight size={20} />}
                 </>
               )}
             </button>

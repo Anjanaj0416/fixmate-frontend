@@ -3,16 +3,15 @@ import { useNavigate, Link } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { Input, Button } from '../common';
-import { AuthContext } from '../../context/AuthContext';  // ← FIXED: Up 2 levels
+import { AuthContext } from '../../context/AuthContext';
+import storage from '../../utils/storage'; // ← ADD THIS IMPORT
 
 /**
  * Login Form Component
  * Handles user login with email and password
  * 
- * COMPLETE FIX: 
- * - Send firebaseUid to backend
- * - Update AuthContext before navigation
- * - Use window.location for guaranteed navigation
+ * ✅ FIXED: Using storage utility for consistent token management
+ * ✅ FIXED: Proper error handling with detailed messages
  */
 const LoginForm = ({ onSuccess, onError }) => {
   const navigate = useNavigate();
@@ -99,7 +98,6 @@ const LoginForm = ({ onSuccess, onError }) => {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
       console.log('3️⃣ Verifying with backend:', `${apiUrl}/api/v1/auth/login`);
 
-      // ✅ CRITICAL FIX: Backend expects firebaseUid, not email!
       const requestBody = {
         firebaseUid: userCredential.user.uid,
       };
@@ -126,7 +124,7 @@ const LoginForm = ({ onSuccess, onError }) => {
       const data = await response.json();
       console.log('✅ Response data:', data);
 
-      // ✅ Extract user data from response
+      // Extract user data from response
       const userData = data.data?.user || data.user || data.data || data;
       
       if (!userData || !userData.role) {
@@ -139,19 +137,11 @@ const LoginForm = ({ onSuccess, onError }) => {
       console.log('👤 User data:', userData);
       console.log('🎭 User role:', userRole);
 
-      // ✅ CRITICAL: Store auth data BEFORE navigation
-      // ALWAYS store in localStorage (PrivateRoute checks this)
-      localStorage.setItem('fixmate_auth_token', idToken);
-      localStorage.setItem('fixmate_user', JSON.stringify(userData));
-      
-      if (rememberMe) {
-        localStorage.setItem('fixmate_remember', 'true');
-      } else {
-        sessionStorage.setItem('fixmate_auth_token', idToken);
-        sessionStorage.setItem('fixmate_user', JSON.stringify(userData));
-      }
-
-      console.log('💾 User data stored in localStorage');
+      // ✅ FIX: Use storage utility for consistent token storage
+      console.log('💾 Storing authentication data...');
+      storage.saveAuthToken(idToken);
+      storage.saveUserData(userData);
+      console.log('✅ Authentication data stored');
 
       // ✅ CRITICAL: Update AuthContext BEFORE navigation
       if (updateUser) {
@@ -160,17 +150,17 @@ const LoginForm = ({ onSuccess, onError }) => {
         console.log('✅ AuthContext updated');
       }
 
-      // ✅ Call success callback
+      // Call success callback
       if (onSuccess) {
         onSuccess(userData);
       }
 
       console.log('✅ Login successful!');
 
-      // ✅ Small delay to ensure state updates complete
+      // Small delay to ensure state updates complete
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // ✅ Navigate based on user role with fallback
+      // Navigate based on user role with fallback
       console.log('🧭 Navigating based on role:', userRole);
       
       if (userRole === 'customer') {
