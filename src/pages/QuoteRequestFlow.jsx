@@ -1,17 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, MapPin, Calendar, AlertCircle, Upload, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, MapPin, Calendar, AlertCircle } from 'lucide-react';
 import storage from '../utils/storage';
 import apiService from '../services/apiService';
 import ImageUpload from '../components/quote/ImageUpload';
 
 /**
- * Quote Request Flow Component - UPDATED
+ * Quote Request Flow Component - COMPLETE FIX
  * Multi-step form for customers to create quote requests
  * 
- * ✅ FIXED: Removed GPS location system
- * ✅ FIXED: Added manual town/location selection
- * ✅ FIXED: Proper navigation to worker listing
+ * ✅ FIXED: Correct API endpoint with /api/v1 prefix
+ * ✅ FIXED: ImageUpload component integration
+ * ✅ FIXED: issueLocation dropdown with proper enum values
+ * ✅ FIXED: Proper error handling
  */
 const QuoteRequestFlow = () => {
   const navigate = useNavigate();
@@ -25,18 +26,30 @@ const QuoteRequestFlow = () => {
   const [formData, setFormData] = useState({
     serviceType: selectedCategory?.id || '',
     problemDescription: '',
-    issueLocation: '',
+    issueLocation: '', // Will be one of the enum values
     serviceDate: '',
     urgency: 'normal',
     budgetRange: '',
-    problemImages: [],
-    // ✅ CHANGED: Manual location instead of GPS
-    town: '', // Customer's town/city
-    district: '', // Customer's district
+    problemImages: [], // Array of {id, filename, base64, size}
+    town: '',
+    district: '',
     contactPhone: ''
   });
 
-  // ✅ NEW: Sri Lankan towns/cities by district
+  // ✅ FIXED: Issue location options matching MongoDB enum exactly
+  const issueLocationOptions = [
+    { value: 'Kitchen', label: 'Kitchen' },
+    { value: 'Bathroom', label: 'Bathroom' },
+    { value: 'Living room', label: 'Living Room' },
+    { value: 'Bedroom', label: 'Bedroom' },
+    { value: 'Garage', label: 'Garage' },
+    { value: 'Basement', label: 'Basement' },
+    { value: 'Outdoor area', label: 'Outdoor Area' },
+    { value: 'Rooftop', label: 'Rooftop' },
+    { value: 'Other', label: 'Other' }
+  ];
+
+  // Sri Lankan locations by district
   const sriLankanLocations = {
     'Colombo': ['Colombo', 'Dehiwala', 'Mount Lavinia', 'Moratuwa', 'Kotte', 'Maharagama', 'Nugegoda', 'Piliyandala'],
     'Gampaha': ['Gampaha', 'Negombo', 'Katunayake', 'Ja-Ela', 'Wattala', 'Kelaniya', 'Kadawatha', 'Ragama', 'Veyangoda'],
@@ -54,96 +67,32 @@ const QuoteRequestFlow = () => {
     'Mullaitivu': ['Mullaitivu', 'Oddusuddan'],
     'Batticaloa': ['Batticaloa', 'Kattankudy', 'Eravur'],
     'Ampara': ['Ampara', 'Kalmunai', 'Sammanthurai'],
-    'Trincomalee': ['Trincomalee', 'Kinniya', 'Mutur'],
-    'Kurunegala': ['Kurunegala', 'Kuliyapitiya', 'Narammala', 'Wariyapola'],
-    'Puttalam': ['Puttalam', 'Chilaw', 'Wennappuwa', 'Nattandiya'],
+    'Trincomalee': ['Trincomalee', 'Kinniya', 'Muttur'],
+    'Kurunegala': ['Kurunegala', 'Kuliyapitiya', 'Pannala', 'Narammala'],
+    'Puttalam': ['Puttalam', 'Chilaw', 'Wennappuwa', 'Anamaduwa'],
     'Anuradhapura': ['Anuradhapura', 'Kekirawa', 'Medawachchiya'],
-    'Polonnaruwa': ['Polonnaruwa', 'Kaduruwela', 'Hingurakgoda'],
+    'Polonnaruwa': ['Polonnaruwa', 'Kaduruwela', 'Medirigiriya'],
     'Badulla': ['Badulla', 'Bandarawela', 'Haputale', 'Welimada'],
-    'Monaragala': ['Monaragala', 'Wellawaya', 'Buttala'],
+    'Monaragala': ['Monaragala', 'Wellawaya', 'Bibile'],
     'Ratnapura': ['Ratnapura', 'Embilipitiya', 'Balangoda', 'Pelmadulla'],
-    'Kegalle': ['Kegalle', 'Mawanella', 'Warakapola']
+    'Kegalle': ['Kegalle', 'Mawanella', 'Warakapola', 'Rambukkana']
   };
 
-  const locationOptions = [
-    'Kitchen',
-    'Bathroom',
-    'Living room',
-    'Bedroom',
-    'Garage',
-    'Basement',
-    'Outdoor area',
-    'Rooftop',
-    'Other'
-  ];
-
   const urgencyOptions = [
-    { value: 'low', label: 'Low - Within a week' },
-    { value: 'normal', label: 'Normal - Within 2-3 days' },
-    { value: 'high', label: 'High - Within 24 hours' },
-    { value: 'emergency', label: 'Emergency - ASAP' }
+    { value: 'normal', label: 'Normal (Within a week)' },
+    { value: 'high', label: 'Urgent (Within 2-3 days)' },
+    { value: 'emergency', label: 'Emergency (ASAP)' }
   ];
 
-  const budgetOptions = [
-    { value: '1000-3000', label: 'Rs. 1,000 - 3,000' },
-    { value: '3000-5000', label: 'Rs. 3,000 - 5,000' },
+  const budgetRanges = [
+    { value: '0-5000', label: 'Rs. 0 - 5,000' },
     { value: '5000-10000', label: 'Rs. 5,000 - 10,000' },
     { value: '10000-20000', label: 'Rs. 10,000 - 20,000' },
     { value: '20000-50000', label: 'Rs. 20,000 - 50,000' },
     { value: '50000+', label: 'Rs. 50,000+' }
   ];
 
-  // Load user data on mount
-  useEffect(() => {
-    if (!selectedCategory) {
-      navigate('/customer/service-selection');
-      return;
-    }
-    
-    loadUserData();
-  }, [selectedCategory, navigate]);
-
-  const loadUserData = () => {
-    const user = storage.getUserData();
-    
-    if (user) {
-      setFormData(prev => ({
-        ...prev,
-        contactPhone: user.phoneNumber || ''
-      }));
-    }
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
-    // Clear error for this field
-    if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-
-    // ✅ NEW: When district changes, reset town
-    if (name === 'district') {
-      setFormData(prev => ({
-        ...prev,
-        town: ''
-      }));
-    }
-  };
-
-  // ✅ NEW: Handle image uploads
-  const handleImagesChange = (images) => {
-    setFormData(prev => ({
-      ...prev,
-      problemImages: images
-    }));
-  };
-
+  // Validate current step
   const validateStep = () => {
     const newErrors = {};
 
@@ -154,11 +103,11 @@ const QuoteRequestFlow = () => {
     }
 
     if (currentStep === 2) {
-      if (!formData.problemDescription || formData.problemDescription.length < 20) {
-        newErrors.problemDescription = 'Please provide a detailed description (minimum 20 characters)';
+      if (!formData.problemDescription || formData.problemDescription.trim().length < 20) {
+        newErrors.problemDescription = 'Please provide a detailed description (at least 20 characters)';
       }
       if (!formData.issueLocation) {
-        newErrors.issueLocation = 'Please specify where the issue is located';
+        newErrors.issueLocation = 'Please select where the issue is located';
       }
       if (!formData.serviceDate) {
         newErrors.serviceDate = 'Please select a preferred service date';
@@ -173,7 +122,6 @@ const QuoteRequestFlow = () => {
     }
 
     if (currentStep === 3) {
-      // ✅ NEW: Validate manual location
       if (!formData.district) {
         newErrors.district = 'Please select your district';
       }
@@ -213,46 +161,48 @@ const QuoteRequestFlow = () => {
     try {
       console.log('📤 Submitting quote request...');
 
-      // ✅ Prepare Base64 images
+      // Prepare Base64 images
       const imageData = formData.problemImages.map((img) => img.base64);
 
-      // ✅ Prepare location object with manual location
+      // Prepare location object
       const serviceLocation = {
         town: formData.town,
+        city: formData.town, // ✅ FIXED: Backend expects 'city' field
         district: formData.district,
         address: `${formData.town}, ${formData.district}`,
-        // For future geolocation, we can add approximate coordinates based on town
         coordinates: null
       };
 
-      // ✅ Prepare request data
+      // ✅ FIXED: Prepare request data with correct field names
       const requestData = {
         serviceType: formData.serviceType,
         problemDescription: formData.problemDescription,
-        issueLocation: formData.issueLocation,
+        issueLocation: formData.issueLocation, // ✅ Now uses proper enum value
+        scheduledDate: formData.serviceDate, // ✅ FIXED: Backend expects 'scheduledDate'
         serviceDate: formData.serviceDate,
         urgency: formData.urgency,
         budgetRange: formData.budgetRange,
         problemImages: imageData,
-        serviceLocation: serviceLocation, // ✅ Manual location instead of GPS
+        serviceLocation: serviceLocation,
         contactPhone: formData.contactPhone,
       };
 
       console.log('Request data prepared:', {
         serviceType: requestData.serviceType,
+        issueLocation: requestData.issueLocation,
         imageCount: requestData.problemImages.length,
         location: requestData.serviceLocation
       });
 
-      // ✅ Submit quote request
-      const response = await apiService.post('/bookings/quote-request', requestData);
+      // ✅ FIXED: Submit quote request with correct endpoint
+      const response = await apiService.post('/api/v1/bookings/quote-request', requestData);
 
-      console.log('✅ Quote request created:', response.data);
+      console.log('✅ Quote request created:', response);
 
-      // ✅ Navigate to worker listing with quote request ID and location
+      // Navigate to worker listing
       navigate('/customer/find-workers', {
         state: {
-          quoteRequestId: response.data.data.quoteRequest._id,
+          quoteRequestId: response.data.quoteRequest._id,
           serviceType: formData.serviceType,
           location: serviceLocation,
           category: selectedCategory
@@ -263,7 +213,7 @@ const QuoteRequestFlow = () => {
       console.error('❌ Error creating quote request:', error);
       
       setErrors({
-        submit: error.response?.data?.message || 'Failed to create quote request. Please try again.'
+        submit: error.response?.data?.message || error.message || 'Failed to create quote request. Please try again.'
       });
     } finally {
       setLoading(false);
@@ -275,6 +225,14 @@ const QuoteRequestFlow = () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     return tomorrow.toISOString().split('T')[0];
+  };
+
+  // Handle image updates
+  const handleImagesChange = (newImages) => {
+    setFormData(prev => ({
+      ...prev,
+      problemImages: newImages
+    }));
   };
 
   return (
@@ -295,12 +253,12 @@ const QuoteRequestFlow = () => {
               <div
                 key={step}
                 className={`flex-1 h-2 mx-1 rounded-full transition-colors ${
-                  step <= currentStep ? 'bg-indigo-600' : 'bg-gray-200'
+                  step <= currentStep ? 'bg-indigo-600' : 'bg-gray-300'
                 }`}
               />
             ))}
           </div>
-          <div className="flex justify-between text-xs text-gray-600">
+          <div className="flex justify-between text-sm text-gray-600">
             <span>Service</span>
             <span>Details</span>
             <span>Location</span>
@@ -308,31 +266,39 @@ const QuoteRequestFlow = () => {
           </div>
         </div>
 
-        {/* Form Card */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          {/* Step 1: Service Type (if not pre-selected) */}
+        {/* Error Message */}
+        {errors.submit && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-start gap-2">
+              <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">{errors.submit}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Form Content */}
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          {/* Step 1: Service Type */}
           {currentStep === 1 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Service Type
-              </h2>
-              <p className="text-gray-600 mb-4">
-                Selected: <span className="font-medium text-indigo-600">{selectedCategory?.name}</span>
-              </p>
-              <input
-                type="hidden"
-                name="serviceType"
-                value={formData.serviceType}
-              />
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-4">Select Service Type</h2>
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <p className="text-lg font-medium text-indigo-900">
+                    {selectedCategory?.name}
+                  </p>
+                  <p className="text-sm text-indigo-700 mt-1">
+                    {selectedCategory?.description}
+                  </p>
+                </div>
+              </div>
             </div>
           )}
 
           {/* Step 2: Problem Details */}
           {currentStep === 2 && (
             <div className="space-y-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Tell us about your problem
-              </h2>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Problem Details</h2>
 
               {/* Problem Description */}
               <div>
@@ -340,44 +306,47 @@ const QuoteRequestFlow = () => {
                   Problem Description *
                 </label>
                 <textarea
-                  name="problemDescription"
                   value={formData.problemDescription}
-                  onChange={handleChange}
-                  rows={4}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                    errors.problemDescription ? 'border-red-500' : 'border-gray-300'
+                  onChange={(e) => setFormData({ ...formData, problemDescription: e.target.value })}
+                  placeholder="Describe the problem in detail..."
+                  rows={5}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                    errors.problemDescription ? 'border-red-300' : 'border-gray-300'
                   }`}
-                  placeholder="Please describe the problem in detail (minimum 20 characters)"
                 />
                 {errors.problemDescription && (
                   <p className="mt-1 text-sm text-red-600">{errors.problemDescription}</p>
                 )}
                 <p className="mt-1 text-xs text-gray-500">
-                  {formData.problemDescription.length} characters
+                  {formData.problemDescription.length} characters (minimum 20)
                 </p>
               </div>
 
-              {/* Issue Location in House */}
+              {/* ✅ FIXED: Issue Location Dropdown */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Where is the issue located? *
+                  Issue Location in House *
                 </label>
                 <select
-                  name="issueLocation"
                   value={formData.issueLocation}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                    errors.issueLocation ? 'border-red-500' : 'border-gray-300'
+                  onChange={(e) => setFormData({ ...formData, issueLocation: e.target.value })}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                    errors.issueLocation ? 'border-red-300' : 'border-gray-300'
                   }`}
                 >
                   <option value="">Select location</option>
-                  {locationOptions.map((loc) => (
-                    <option key={loc} value={loc}>{loc}</option>
+                  {issueLocationOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
                   ))}
                 </select>
                 {errors.issueLocation && (
                   <p className="mt-1 text-sm text-red-600">{errors.issueLocation}</p>
                 )}
+                <p className="mt-1 text-xs text-gray-500">
+                  Where in your property is the problem located?
+                </p>
               </div>
 
               {/* Service Date */}
@@ -387,12 +356,11 @@ const QuoteRequestFlow = () => {
                 </label>
                 <input
                   type="date"
-                  name="serviceDate"
                   value={formData.serviceDate}
-                  onChange={handleChange}
+                  onChange={(e) => setFormData({ ...formData, serviceDate: e.target.value })}
                   min={getMinDate()}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                    errors.serviceDate ? 'border-red-500' : 'border-gray-300'
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                    errors.serviceDate ? 'border-red-300' : 'border-gray-300'
                   }`}
                 />
                 {errors.serviceDate && (
@@ -405,16 +373,24 @@ const QuoteRequestFlow = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Urgency Level
                 </label>
-                <select
-                  name="urgency"
-                  value={formData.urgency}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                >
-                  {urgencyOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                <div className="space-y-2">
+                  {urgencyOptions.map((option) => (
+                    <label
+                      key={option.value}
+                      className="flex items-center p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="urgency"
+                        value={option.value}
+                        checked={formData.urgency === option.value}
+                        onChange={(e) => setFormData({ ...formData, urgency: e.target.value })}
+                        className="mr-3"
+                      />
+                      <span className="text-gray-900">{option.label}</span>
+                    </label>
                   ))}
-                </select>
+                </div>
               </div>
 
               {/* Budget Range */}
@@ -423,16 +399,17 @@ const QuoteRequestFlow = () => {
                   Budget Range *
                 </label>
                 <select
-                  name="budgetRange"
                   value={formData.budgetRange}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                    errors.budgetRange ? 'border-red-500' : 'border-gray-300'
+                  onChange={(e) => setFormData({ ...formData, budgetRange: e.target.value })}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                    errors.budgetRange ? 'border-red-300' : 'border-gray-300'
                   }`}
                 >
                   <option value="">Select budget range</option>
-                  {budgetOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  {budgetRanges.map((range) => (
+                    <option key={range.value} value={range.value}>
+                      {range.label}
+                    </option>
                   ))}
                 </select>
                 {errors.budgetRange && (
@@ -440,32 +417,25 @@ const QuoteRequestFlow = () => {
                 )}
               </div>
 
-              {/* Problem Images */}
+              {/* Image Upload Component */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Problem Photos (Optional)
                 </label>
-                <p className="text-sm text-gray-500 mb-3">
-                  Photos help workers understand the problem better and provide accurate quotes.
-                </p>
                 <ImageUpload
                   images={formData.problemImages}
-                  onChange={handleImagesChange}
+                  setImages={handleImagesChange}
                   maxImages={5}
+                  maxSizeMB={5}
                 />
               </div>
             </div>
           )}
 
-          {/* Step 3: Manual Location Selection */}
+          {/* Step 3: Location */}
           {currentStep === 3 && (
             <div className="space-y-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">
-                Your Location
-              </h2>
-              <p className="text-gray-600 mb-4">
-                We need your location to find nearby workers.
-              </p>
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Your Location</h2>
 
               {/* District Selection */}
               <div>
@@ -473,16 +443,19 @@ const QuoteRequestFlow = () => {
                   District *
                 </label>
                 <select
-                  name="district"
                   value={formData.district}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                    errors.district ? 'border-red-500' : 'border-gray-300'
+                  onChange={(e) => {
+                    setFormData({ ...formData, district: e.target.value, town: '' });
+                  }}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
+                    errors.district ? 'border-red-300' : 'border-gray-300'
                   }`}
                 >
-                  <option value="">Select your district</option>
+                  <option value="">Select district</option>
                   {Object.keys(sriLankanLocations).sort().map((district) => (
-                    <option key={district} value={district}>{district}</option>
+                    <option key={district} value={district}>
+                      {district}
+                    </option>
                   ))}
                 </select>
                 {errors.district && (
@@ -490,59 +463,58 @@ const QuoteRequestFlow = () => {
                 )}
               </div>
 
-              {/* Town Selection */}
-              {formData.district && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Town/City *
-                  </label>
-                  <select
-                    name="town"
-                    value={formData.town}
-                    onChange={handleChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent ${
-                      errors.town ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select your town/city</option>
-                    {sriLankanLocations[formData.district].map((town) => (
-                      <option key={town} value={town}>{town}</option>
-                    ))}
-                  </select>
-                  {errors.town && (
-                    <p className="mt-1 text-sm text-red-600">{errors.town}</p>
-                  )}
-                </div>
-              )}
-
-              {/* Contact Phone */}
+              {/* Town/City Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Contact Phone Number
+                  Town/City *
+                </label>
+                <select
+                  value={formData.town}
+                  onChange={(e) => setFormData({ ...formData, town: e.target.value })}
+                  disabled={!formData.district}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed ${
+                    errors.town ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                >
+                  <option value="">Select town/city</option>
+                  {formData.district &&
+                    sriLankanLocations[formData.district].map((town) => (
+                      <option key={town} value={town}>
+                        {town}
+                      </option>
+                    ))}
+                </select>
+                {errors.town && (
+                  <p className="mt-1 text-sm text-red-600">{errors.town}</p>
+                )}
+              </div>
+
+              {/* Contact Phone (Optional) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Contact Phone (Optional)
                 </label>
                 <input
                   type="tel"
-                  name="contactPhone"
                   value={formData.contactPhone}
-                  onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  placeholder="+94 XX XXX XXXX"
+                  onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
+                  placeholder="+94 77 123 4567"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                 />
                 <p className="mt-1 text-xs text-gray-500">
-                  Workers will use this number to contact you
+                  If different from your registered phone number
                 </p>
               </div>
 
-              {/* Location Info Box */}
               {formData.district && formData.town && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <MapPin size={20} className="text-green-600 flex-shrink-0 mt-1" />
+                  <div className="flex items-start gap-2">
+                    <MapPin size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-medium text-green-900">
-                        Location selected
+                        Location Selected
                       </p>
-                      <p className="text-sm text-green-700">
+                      <p className="text-sm text-green-700 mt-1">
                         {formData.town}, {formData.district}
                       </p>
                     </div>
@@ -554,20 +526,8 @@ const QuoteRequestFlow = () => {
 
           {/* Step 4: Review */}
           {currentStep === 4 && (
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                Review Your Request
-              </h2>
-
-              {/* Display Error */}
-              {errors.submit && (
-                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-red-800">{errors.submit}</p>
-                  </div>
-                </div>
-              )}
+            <div className="space-y-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">Review Your Request</h2>
 
               <div className="space-y-4">
                 {/* Service Type */}
@@ -578,7 +538,7 @@ const QuoteRequestFlow = () => {
 
                 {/* Problem Description */}
                 <div className="pb-4 border-b border-gray-200">
-                  <p className="text-sm text-gray-600">Problem Description</p>
+                  <p className="text-sm text-gray-600 mb-2">Problem Description</p>
                   <p className="text-base text-gray-900">{formData.problemDescription}</p>
                 </div>
 
@@ -588,10 +548,10 @@ const QuoteRequestFlow = () => {
                   <p className="text-base text-gray-900">{formData.issueLocation}</p>
                 </div>
 
-                {/* Service Date */}
+                {/* Service Date & Urgency */}
                 <div className="pb-4 border-b border-gray-200">
                   <p className="text-sm text-gray-600">Preferred Service Date</p>
-                  <p className="text-base text-gray-900">
+                  <p className="text-base font-medium text-gray-900">
                     {new Date(formData.serviceDate).toLocaleDateString('en-US', {
                       weekday: 'long',
                       year: 'numeric',
@@ -599,18 +559,14 @@ const QuoteRequestFlow = () => {
                       day: 'numeric'
                     })}
                   </p>
-                </div>
-
-                {/* Urgency */}
-                <div className="pb-4 border-b border-gray-200">
-                  <p className="text-sm text-gray-600">Urgency</p>
+                  <p className="text-sm text-gray-600 mt-2">Urgency</p>
                   <p className="text-base text-gray-900 capitalize">{formData.urgency}</p>
                 </div>
 
-                {/* Budget */}
+                {/* Budget Range */}
                 <div className="pb-4 border-b border-gray-200">
                   <p className="text-sm text-gray-600">Budget Range</p>
-                  <p className="text-base text-gray-900">
+                  <p className="text-base font-medium text-gray-900">
                     Rs. {formData.budgetRange.replace('-', ' - ')}
                   </p>
                 </div>
@@ -677,12 +633,17 @@ const QuoteRequestFlow = () => {
             >
               {loading ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  Submitting...
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                  Creating Request...
+                </>
+              ) : currentStep === 4 ? (
+                <>
+                  Submit Request
+                  <ArrowRight size={20} />
                 </>
               ) : (
                 <>
-                  {currentStep === 4 ? 'Submit & Find Workers' : 'Next'}
+                  Next
                   <ArrowRight size={20} />
                 </>
               )}

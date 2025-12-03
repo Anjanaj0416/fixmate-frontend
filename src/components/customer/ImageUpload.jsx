@@ -1,195 +1,314 @@
-import React, { useState } from 'react';
-import { Upload, X, AlertCircle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Upload, X, Image as ImageIcon, AlertCircle } from 'lucide-react';
 
 /**
- * ImageUpload Component
- * Handles multiple image uploads with preview and base64 conversion
+ * Image Upload Component - FIXED
+ * Handles image selection, preview, compression, and Base64 conversion
  * 
- * @param {Array} images - Current images array
- * @param {Function} onChange - Callback when images change
- * @param {Number} maxImages - Maximum number of images allowed (default: 5)
- * @param {Number} maxSizeMB - Maximum file size in MB (default: 5)
+ * ✅ FIXED: Proper prop handling
+ * ✅ FIXED: Image compression
+ * ✅ FIXED: Base64 conversion for MongoDB
  */
-const ImageUpload = ({ images = [], onChange, maxImages = 5, maxSizeMB = 5 }) => {
+const ImageUpload = ({ 
+  images = [], 
+  setImages, 
+  maxImages = 5,
+  maxSizeMB = 5,
+  className = '' 
+}) => {
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [uploading, setUploading] = useState(false);
-
-  /**
-   * Convert file to base64
-   */
-  const fileToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
-    });
-  };
+  const [dragActive, setDragActive] = useState(false);
+  const fileInputRef = useRef(null);
 
   /**
    * Handle file selection
    */
   const handleFileSelect = async (event) => {
-    const files = Array.from(event.target.files);
-    setError('');
+    const files = Array.from(event.target.files || []);
+    await processFiles(files);
+  };
 
-    // Check if adding these files exceeds max
-    if (images.length + files.length > maxImages) {
+  /**
+   * Process and compress images
+   */
+  const processFiles = async (files) => {
+    if (files.length === 0) return;
+
+    if (files.length + images.length > maxImages) {
       setError(`Maximum ${maxImages} images allowed`);
       return;
     }
 
-    setUploading(true);
+    setLoading(true);
+    setError('');
 
     try {
-      const newImages = [];
-
-      for (const file of files) {
-        // Validate file type
-        if (!file.type.startsWith('image/')) {
-          setError(`${file.name} is not an image file`);
-          continue;
-        }
-
-        // Validate file size
-        const fileSizeMB = file.size / (1024 * 1024);
-        if (fileSizeMB > maxSizeMB) {
-          setError(`${file.name} is too large. Maximum size is ${maxSizeMB}MB`);
-          continue;
-        }
-
-        // Convert to base64
-        const base64 = await fileToBase64(file);
-
-        newImages.push({
-          id: `${Date.now()}-${Math.random()}`,
-          name: file.name,
-          size: file.size,
-          type: file.type,
-          base64: base64
-        });
+      const imagePromises = files.map((file) => compressImage(file));
+      const newImages = await Promise.all(imagePromises);
+      
+      // Filter out any failed compressions
+      const validImages = newImages.filter(img => img !== null);
+      
+      setImages([...images, ...validImages]);
+      
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-
-      // Call onChange with updated images array
-      onChange([...images, ...newImages]);
-
     } catch (error) {
-      console.error('Error uploading images:', error);
-      setError('Failed to upload images. Please try again.');
+      console.error('Error processing images:', error);
+      setError('Failed to process some images');
     } finally {
-      setUploading(false);
-      // Reset input
-      event.target.value = '';
+      setLoading(false);
     }
   };
 
   /**
-   * Remove image from array
+   * Compress and convert image to Base64
    */
-  const handleRemove = (imageId) => {
-    const updatedImages = images.filter(img => img.id !== imageId);
-    onChange(updatedImages);
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setError(`${file.name} is not a supported image format`);
+        resolve(null);
+        return;
+      }
+
+      // Validate file size
+      const maxSize = maxSizeMB * 1024 * 1024;
+      if (file.size > maxSize) {
+        setError(`${file.name} is too large. Maximum size is ${maxSizeMB}MB`);
+        resolve(null);
+        return;
+      }
+
+      const reader = new FileReader();
+      
+      reader.onload = (e) => {
+        const img = new Image();
+        
+        img.onload = () => {
+          // Create canvas for compression
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // Calculate new dimensions (max 1920x1080)
+          let width = img.width;
+          let height = img.height;
+          const maxWidth = 1920;
+          const maxHeight = 1080;
+
+          if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width = Math.floor(width * ratio);
+            height = Math.floor(height * ratio);
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw compressed image
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to Base64 (JPEG with 85% quality for good balance)
+          const base64 = canvas.toDataURL('image/jpeg', 0.85);
+
+          // Calculate compressed size
+          const compressedSize = Math.round((base64.length * 3) / 4);
+
+          resolve({
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            filename: file.name,
+            base64: base64,
+            size: compressedSize,
+            originalSize: file.size,
+            compressedSize: compressedSize
+          });
+        };
+
+        img.onerror = () => {
+          setError(`Failed to load ${file.name}`);
+          resolve(null);
+        };
+
+        img.src = e.target.result;
+      };
+
+      reader.onerror = () => {
+        setError(`Failed to read ${file.name}`);
+        resolve(null);
+      };
+
+      reader.readAsDataURL(file);
+    });
+  };
+
+  /**
+   * Remove image from list
+   */
+  const removeImage = (id) => {
+    setImages(images.filter(img => img.id !== id));
+    setError('');
+  };
+
+  /**
+   * Handle drag events
+   */
+  const handleDrag = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  /**
+   * Handle drop
+   */
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files);
+      processFiles(files);
+    }
   };
 
   /**
    * Format file size for display
    */
   const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
   };
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${className}`}>
       {/* Upload Area */}
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 hover:border-indigo-400 transition-colors">
-        <div className="text-center">
-          <Upload className="mx-auto h-12 w-12 text-gray-400" />
-          <div className="mt-4">
-            <label
-              htmlFor="image-upload"
-              className="cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              {uploading ? 'Uploading...' : 'Upload Problem Photos'}
-              <input
-                id="image-upload"
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleFileSelect}
-                disabled={uploading || images.length >= maxImages}
-                className="sr-only"
-              />
-            </label>
-          </div>
-          <p className="mt-2 text-xs text-gray-500">
-            {images.length} / {maxImages} images • Max {maxSizeMB}MB each
-          </p>
-          <p className="mt-1 text-xs text-gray-400">
-            Supported: JPG, PNG, WebP
-          </p>
-        </div>
+      <div
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/jpg,image/png,image/webp"
+          multiple
+          onChange={handleFileSelect}
+          disabled={loading || images.length >= maxImages}
+          className="hidden"
+          id="image-upload-input"
+        />
+        
+        <label
+          htmlFor="image-upload-input"
+          className={`flex flex-col items-center justify-center w-full min-h-[200px] border-2 border-dashed rounded-lg transition-all ${
+            loading || images.length >= maxImages
+              ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
+              : dragActive
+              ? 'border-indigo-500 bg-indigo-50'
+              : 'border-indigo-300 bg-indigo-50/50 hover:bg-indigo-100 cursor-pointer'
+          }`}
+        >
+          {loading ? (
+            <>
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600" />
+              <span className="text-indigo-600 font-medium mt-4">Processing images...</span>
+            </>
+          ) : (
+            <>
+              <Upload size={40} className={dragActive ? 'text-indigo-600' : 'text-indigo-500'} />
+              <div className="text-center mt-4">
+                <p className="text-indigo-600 font-medium text-lg">
+                  Upload Problem Photos
+                </p>
+                <p className="text-sm text-gray-600 mt-1">
+                  Click to browse or drag and drop
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  {images.length} / {maxImages} images • Max {maxSizeMB}MB each
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Supported: JPG, PNG, WebP
+                </p>
+              </div>
+            </>
+          )}
+        </label>
       </div>
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-          <div className="flex items-start gap-2">
-            <AlertCircle size={16} className="text-red-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-800">{error}</p>
-          </div>
+        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-red-800">{error}</p>
         </div>
       )}
 
       {/* Image Previews */}
       {images.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {images.map((image) => (
             <div
               key={image.id}
-              className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50"
+              className="relative group aspect-square rounded-lg overflow-hidden border-2 border-gray-200 hover:border-indigo-400 transition-all"
             >
               {/* Image */}
-              <div className="aspect-square">
-                <img
-                  src={image.base64}
-                  alt={image.name}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              {/* Overlay with info */}
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200">
-                <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <p className="text-white text-xs font-medium mb-1 px-2 text-center truncate w-full">
-                    {image.name}
-                  </p>
-                  <p className="text-white text-xs">
-                    {formatFileSize(image.size)}
-                  </p>
-                </div>
-              </div>
+              <img
+                src={image.base64}
+                alt={image.filename}
+                className="w-full h-full object-cover"
+              />
 
               {/* Remove Button */}
               <button
-                onClick={() => handleRemove(image.id)}
-                className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                onClick={() => removeImage(image.id)}
+                className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                type="button"
                 title="Remove image"
               >
-                <X size={16} />
+                <X size={18} />
               </button>
+
+              {/* Image Info Overlay */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent text-white p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                <p className="text-xs font-medium truncate">{image.filename}</p>
+                <p className="text-xs opacity-75">
+                  {formatFileSize(image.compressedSize)}
+                </p>
+              </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Helper Text */}
-      {images.length === 0 && (
-        <p className="text-sm text-gray-500 text-center">
-          Photos help workers understand the problem better and provide accurate quotes
-        </p>
+      {/* Empty State */}
+      {images.length === 0 && !loading && !error && (
+        <div className="text-center py-8 text-gray-400">
+          <ImageIcon size={48} className="mx-auto mb-3 opacity-50" />
+          <p className="text-sm">No images uploaded yet</p>
+          <p className="text-xs mt-1">Add up to {maxImages} photos of the problem</p>
+        </div>
       )}
+
+      {/* Helper Text */}
+      <div className="text-xs text-gray-500 space-y-1">
+        <p>• Photos will be compressed automatically for faster upload</p>
+        <p>• Supported formats: JPG, PNG, WebP</p>
+        <p>• Clear photos help workers understand the problem better</p>
+      </div>
     </div>
   );
 };
