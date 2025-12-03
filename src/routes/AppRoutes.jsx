@@ -53,6 +53,8 @@ const AppRoutes = () => {
       <Route path="/select-account-type" element={<AccountTypeSelection />} />
       <Route path="/worker-registration" element={<WorkerRegistrationFlow />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/customer/find-workers" element={<FindWorkers />} />
+      <Route path="/customer/worker-profile/:workerId" element={<WorkerProfile />} />
 
       {/* Customer Routes */}
       <Route

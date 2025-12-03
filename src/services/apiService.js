@@ -20,7 +20,7 @@ import storage from '../utils/storage';
  * const response = await apiService.post('/api/v1/bookings', data);
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
 
 class APIService {
   /**
