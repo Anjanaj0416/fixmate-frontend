@@ -4,6 +4,8 @@ import storage from '../utils/storage';
 /**
  * API Service with Automatic Token Refresh
  * 
+ * ✅ FIXED: Now properly parses JSON responses
+ * 
  * This service handles all API requests with automatic Firebase token refresh
  * to prevent "Session expired" errors.
  * 
@@ -12,12 +14,13 @@ import storage from '../utils/storage';
  * - Retry logic for 401 errors
  * - Consistent token storage
  * - Support for all HTTP methods
+ * - ✅ Proper JSON parsing
  * 
  * Usage:
  * import apiService from '../services/apiService';
  * 
- * const response = await apiService.get('/api/v1/users/profile');
- * const response = await apiService.post('/api/v1/bookings', data);
+ * const data = await apiService.get('/users/profile');
+ * const data = await apiService.post('/bookings/quote-request', requestData);
  */
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
@@ -53,19 +56,27 @@ class APIService {
 
   /**
    * Make HTTP request with automatic token refresh
-   * @param {string} endpoint - API endpoint (e.g., '/api/v1/users/profile')
+   * @param {string} endpoint - API endpoint (e.g., '/users/profile')
    * @param {object} options - Fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @returns {Promise<object>} ✅ FIXED: Returns parsed JSON data, not Response object
    */
   async request(endpoint, options = {}) {
     try {
       // Get fresh token
       const token = await this.getFreshToken();
 
+      // ✅ FIXED: Ensure endpoint doesn't have double /api/v1
+      let cleanEndpoint = endpoint;
+      if (endpoint.startsWith('/api/v1')) {
+        cleanEndpoint = endpoint.replace('/api/v1', '');
+      }
+
       // Prepare full URL
       const url = endpoint.startsWith('http') 
         ? endpoint 
-        : `${API_BASE_URL}${endpoint}`;
+        : `${API_BASE_URL}${cleanEndpoint}`;
+
+      console.log('🌐 API Request:', options.method || 'GET', url);
 
       // Prepare headers
       const headers = {
@@ -98,10 +109,28 @@ class APIService {
           throw new Error('Authentication failed. Please login again.');
         }
 
-        return retryResponse;
+        // ✅ FIXED: Parse JSON before returning
+        if (retryResponse.ok) {
+          const data = await retryResponse.json();
+          console.log('✅ API Response:', data);
+          return data;
+        } else {
+          const errorData = await retryResponse.json().catch(() => ({}));
+          throw new Error(errorData.message || `Request failed with status ${retryResponse.status}`);
+        }
       }
 
-      return response;
+      // ✅ FIXED: Parse JSON before returning
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ API Response:', data);
+        return data;
+      } else {
+        // Try to parse error message
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Request failed with status ${response.status}`);
+      }
+
     } catch (error) {
       console.error('❌ API request error:', error);
       throw error;
@@ -111,10 +140,17 @@ class APIService {
   /**
    * GET request
    * @param {string} endpoint - API endpoint
-   * @param {object} options - Additional fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @param {object} options - Additional fetch options (can include params)
+   * @returns {Promise<object>} Parsed JSON response
    */
   async get(endpoint, options = {}) {
+    // Handle query parameters
+    if (options.params) {
+      const queryString = new URLSearchParams(options.params).toString();
+      endpoint = `${endpoint}${queryString ? '?' + queryString : ''}`;
+      delete options.params;
+    }
+
     return this.request(endpoint, {
       ...options,
       method: 'GET'
@@ -126,7 +162,7 @@ class APIService {
    * @param {string} endpoint - API endpoint
    * @param {object} data - Request body data
    * @param {object} options - Additional fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @returns {Promise<object>} Parsed JSON response
    */
   async post(endpoint, data = {}, options = {}) {
     return this.request(endpoint, {
@@ -141,7 +177,7 @@ class APIService {
    * @param {string} endpoint - API endpoint
    * @param {object} data - Request body data
    * @param {object} options - Additional fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @returns {Promise<object>} Parsed JSON response
    */
   async put(endpoint, data = {}, options = {}) {
     return this.request(endpoint, {
@@ -156,7 +192,7 @@ class APIService {
    * @param {string} endpoint - API endpoint
    * @param {object} data - Request body data
    * @param {object} options - Additional fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @returns {Promise<object>} Parsed JSON response
    */
   async patch(endpoint, data = {}, options = {}) {
     return this.request(endpoint, {
@@ -170,7 +206,7 @@ class APIService {
    * DELETE request
    * @param {string} endpoint - API endpoint
    * @param {object} options - Additional fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @returns {Promise<object>} Parsed JSON response
    */
   async delete(endpoint, options = {}) {
     return this.request(endpoint, {
@@ -184,15 +220,23 @@ class APIService {
    * @param {string} endpoint - API endpoint
    * @param {FormData} formData - FormData object
    * @param {object} options - Additional fetch options
-   * @returns {Promise<Response>} Fetch response
+   * @returns {Promise<object>} Parsed JSON response
    */
   async upload(endpoint, formData, options = {}) {
     try {
       const token = await this.getFreshToken();
 
+      // ✅ FIXED: Ensure endpoint doesn't have double /api/v1
+      let cleanEndpoint = endpoint;
+      if (endpoint.startsWith('/api/v1')) {
+        cleanEndpoint = endpoint.replace('/api/v1', '');
+      }
+
       const url = endpoint.startsWith('http') 
         ? endpoint 
-        : `${API_BASE_URL}${endpoint}`;
+        : `${API_BASE_URL}${cleanEndpoint}`;
+
+      console.log('📤 Upload Request:', url);
 
       // Don't set Content-Type for FormData (browser sets it with boundary)
       const headers = {
@@ -228,10 +272,27 @@ class APIService {
           throw new Error('Authentication failed. Please login again.');
         }
 
-        return retryResponse;
+        // ✅ FIXED: Parse JSON before returning
+        if (retryResponse.ok) {
+          const data = await retryResponse.json();
+          console.log('✅ Upload Response:', data);
+          return data;
+        } else {
+          const errorData = await retryResponse.json().catch(() => ({}));
+          throw new Error(errorData.message || `Upload failed with status ${retryResponse.status}`);
+        }
       }
 
-      return response;
+      // ✅ FIXED: Parse JSON before returning
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ Upload Response:', data);
+        return data;
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Upload failed with status ${response.status}`);
+      }
+
     } catch (error) {
       console.error('❌ Upload error:', error);
       throw error;
