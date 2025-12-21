@@ -49,7 +49,7 @@ const WorkerList = ({ initialCategory, initialLocation }) => {
       });
 
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/search?${queryParams}`,
+        `${process.env.REACT_APP_API_URL}/workers/search?${queryParams}`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
@@ -111,7 +111,7 @@ const WorkerList = ({ initialCategory, initialLocation }) => {
   const handleFavorite = async (workerId, isFavorite) => {
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/customers/favorites/${workerId}`,
+        `${process.env.REACT_APP_API_URL}/customers/favorites/${workerId}`,
         {
           method: isFavorite ? 'POST' : 'DELETE',
           headers: {

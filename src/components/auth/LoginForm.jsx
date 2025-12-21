@@ -96,7 +96,7 @@ const LoginForm = ({ onSuccess, onError }) => {
 
       // Step 3: Verify with backend
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      console.log('3️⃣ Verifying with backend:', `${apiUrl}/api/v1/auth/login`);
+      console.log('3️⃣ Verifying with backend:', `${apiUrl}/auth/login`);
 
       const requestBody = {
         firebaseUid: userCredential.user.uid,
@@ -104,7 +104,7 @@ const LoginForm = ({ onSuccess, onError }) => {
 
       console.log('📤 Request body:', requestBody);
 
-      const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
+      const response = await fetch(`${apiUrl}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

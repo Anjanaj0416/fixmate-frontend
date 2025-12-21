@@ -45,7 +45,7 @@ const GoogleAuthButton = ({
       const isNewUser = result._tokenResponse?.isNewUser || false;
 
       // Determine endpoint based on mode and new user status
-      let endpoint = '/api/v1/auth/login';
+      let endpoint = '/auth/login';
       let requestBody = {
         email: user.email,
         provider: 'google',
@@ -53,7 +53,7 @@ const GoogleAuthButton = ({
 
       // If new user or signup mode, register in backend
       if (isNewUser || mode === 'signup') {
-        endpoint = '/api/v1/auth/signup';
+        endpoint = '/auth/signup';
         requestBody = {
           name: user.displayName,
           email: user.email,

@@ -79,7 +79,7 @@ const ReviewForm = ({ bookingId, workerId, workerName, isOpen, onClose, onSucces
 
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/reviews`,
+        `${process.env.REACT_APP_API_URL}/reviews`,
         {
           method: 'POST',
           headers: {

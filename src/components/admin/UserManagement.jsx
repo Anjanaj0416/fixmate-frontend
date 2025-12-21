@@ -42,7 +42,7 @@ const UserManagement = () => {
       if (filterStatus !== 'all') params.append('status', filterStatus);
 
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/users?${params.toString()}`,
+        `http://localhost:5001/admin/users?${params.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -72,7 +72,7 @@ const UserManagement = () => {
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/users/${userId}/suspend`,
+        `http://localhost:5001/admin/users/${userId}/suspend`,
         {
           method: 'PUT',
           headers: {
@@ -98,7 +98,7 @@ const UserManagement = () => {
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/users/${userId}/reactivate`,
+        `http://localhost:5001/admin/users/${userId}/reactivate`,
         {
           method: 'PUT',
           headers: {
@@ -126,7 +126,7 @@ const UserManagement = () => {
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/users/${userId}`,
+        `http://localhost:5001/admin/users/${userId}`,
         {
           method: 'DELETE',
           headers: {

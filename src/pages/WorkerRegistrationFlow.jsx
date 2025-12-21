@@ -438,11 +438,11 @@ const WorkerRegistrationFlow = () => {
         }
       };
 
-      console.log('🌐 Making API request to:', `${import.meta.env.VITE_API_URL}/api/v1/auth/signup`);
+      console.log('🌐 Making API request to:', `${import.meta.env.VITE_API_URL}/auth/signup`);
 
       // Make API call
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/api/v1/auth/signup`,
+        `${import.meta.env.VITE_API_URL}/auth/signup`,
         workerData,
         config
       );

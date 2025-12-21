@@ -48,7 +48,7 @@ const QuoteCreator = ({ bookingId: propBookingId }) => {
   const fetchBookingDetails = async () => {
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/bookings/${bookingId}`,
+        `${process.env.REACT_APP_API_URL}/workers/bookings/${bookingId}`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
@@ -175,7 +175,7 @@ const QuoteCreator = ({ bookingId: propBookingId }) => {
       const totals = calculateTotals();
       
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/quotes`,
+        `${process.env.REACT_APP_API_URL}/workers/quotes`,
         {
           method: 'POST',
           headers: {

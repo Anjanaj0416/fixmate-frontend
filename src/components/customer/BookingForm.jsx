@@ -48,7 +48,7 @@ const BookingForm = ({ workerId: propWorkerId, onSuccess, onCancel }) => {
   const fetchWorkerDetails = async () => {
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/${workerId}`,
+        `${process.env.REACT_APP_API_URL}/workers/${workerId}`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
@@ -176,7 +176,7 @@ const BookingForm = ({ workerId: propWorkerId, onSuccess, onCancel }) => {
 
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/bookings`,
+        `${process.env.REACT_APP_API_URL}/bookings`,
         {
           method: 'POST',
           headers: {

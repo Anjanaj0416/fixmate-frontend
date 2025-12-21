@@ -35,7 +35,7 @@ const BookingHistory = ({ userId, userRole }) => {
       params.append('sort', sortBy === 'newest' ? '-createdAt' : 'createdAt');
 
       const response = await fetch(
-        `http://localhost:5001/api/v1/bookings?${params.toString()}`,
+        `http://localhost:5001/bookings?${params.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

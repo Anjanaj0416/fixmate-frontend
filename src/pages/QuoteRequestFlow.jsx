@@ -205,7 +205,7 @@ const QuoteRequestFlow = () => {
       });
 
       // ✅ FIXED: Submit quote request
-      const response = await apiService.post('/api/v1/bookings/quote-request', requestData);
+      const response = await apiService.post('/bookings/quote-request', requestData);
 
       console.log('✅ Raw API response:', response);
 

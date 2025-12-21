@@ -29,7 +29,7 @@ const Analytics = () => {
       const token = localStorage.getItem('authToken');
       
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/analytics?timeRange=${timeRange}`,
+        `http://localhost:5001/admin/analytics?timeRange=${timeRange}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

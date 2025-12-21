@@ -24,7 +24,7 @@ const BookingRequests = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/bookings?status=${filter}`,
+        `${process.env.REACT_APP_API_URL}/workers/bookings?status=${filter}`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
@@ -327,7 +327,7 @@ const QuoteModal = ({ isOpen, onClose, booking, onSuccess }) => {
 
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/bookings/${booking.id}/accept`,
+        `${process.env.REACT_APP_API_URL}/workers/bookings/${booking.id}/accept`,
         {
           method: 'POST',
           headers: {
@@ -407,7 +407,7 @@ const RejectModal = ({ isOpen, onClose, booking, onSuccess }) => {
 
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/bookings/${booking.id}/reject`,
+        `${process.env.REACT_APP_API_URL}/workers/bookings/${booking.id}/reject`,
         {
           method: 'POST',
           headers: {

@@ -23,7 +23,7 @@ import storage from '../utils/storage';
  * const data = await apiService.post('/bookings/quote-request', requestData);
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 class APIService {
   /**
@@ -65,10 +65,10 @@ class APIService {
       // Get fresh token
       const token = await this.getFreshToken();
 
-      // ✅ FIXED: Ensure endpoint doesn't have double /api/v1
+      // ✅ FIXED: Ensure endpoint doesn't have double 
       let cleanEndpoint = endpoint;
-      if (endpoint.startsWith('/api/v1')) {
-        cleanEndpoint = endpoint.replace('/api/v1', '');
+      if (endpoint.startsWith('')) {
+        cleanEndpoint = endpoint.replace('', '');
       }
 
       // Prepare full URL
@@ -226,10 +226,10 @@ class APIService {
     try {
       const token = await this.getFreshToken();
 
-      // ✅ FIXED: Ensure endpoint doesn't have double /api/v1
+      // ✅ FIXED: Ensure endpoint doesn't have double 
       let cleanEndpoint = endpoint;
-      if (endpoint.startsWith('/api/v1')) {
-        cleanEndpoint = endpoint.replace('/api/v1', '');
+      if (endpoint.startsWith('')) {
+        cleanEndpoint = endpoint.replace('', '');
       }
 
       const url = endpoint.startsWith('http') 

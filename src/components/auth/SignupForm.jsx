@@ -144,7 +144,7 @@ const SignupForm = ({ onSuccess, onError, defaultRole = 'customer' }) => {
       const idToken = await userCredential.user.getIdToken();
 
       // Create user in backend
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/auth/signup`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

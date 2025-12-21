@@ -163,7 +163,7 @@ const ServiceCategories = ({ onCategorySelect, variant = 'grid' }) => {
     setLoading(true);
     try {
       // In production, fetch from API
-      // const response = await fetch(`${process.env.REACT_APP_API_URL}/api/v1/categories`);
+      // const response = await fetch(`${process.env.REACT_APP_API_URL}/categories`);
       // const data = await response.json();
       
       // For now, use static data

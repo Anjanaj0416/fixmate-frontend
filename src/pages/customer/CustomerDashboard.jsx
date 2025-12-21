@@ -27,7 +27,7 @@ const CustomerDashboard = () => {
   const fetchStats = async () => {
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/v1/bookings/stats`,
+        `${import.meta.env.VITE_API_URL}/bookings/stats`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`

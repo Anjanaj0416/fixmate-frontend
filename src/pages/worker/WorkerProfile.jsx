@@ -59,7 +59,7 @@ const WorkerProfile = () => {
 
       // ✅ CRITICAL FIX: Changed from /workers/stats to /workers/profile
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const endpoint = `${API_BASE_URL}/api/v1/workers/profile`;
+      const endpoint = `${API_BASE_URL}/workers/profile`;
       
       console.log('🌐 Fetching worker profile from:', endpoint);
       console.log('🔑 Using token:', token.substring(0, 20) + '...');

@@ -65,7 +65,7 @@ const WorkerSelectionPage = () => {
       });
 
       // ✅ Use apiService (handles token refresh automatically)
-      const response = await apiService.get(`/api/v1/workers/nearby?${params}`);
+      const response = await apiService.get(`/workers/nearby?${params}`);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -112,7 +112,7 @@ const WorkerSelectionPage = () => {
 
       // ✅ Use apiService (handles token refresh automatically)
       const response = await apiService.post(
-        `/api/v1/bookings/${quoteRequestId}/send-to-workers`,
+        `/bookings/${quoteRequestId}/send-to-workers`,
         { workerIds: selectedWorkers }
       );
 

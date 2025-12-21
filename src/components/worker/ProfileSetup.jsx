@@ -49,7 +49,7 @@ const ProfileSetup = () => {
   const loadExistingProfile = async () => {
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/profile`,
+        `${process.env.REACT_APP_API_URL}/workers/profile`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,
@@ -185,7 +185,7 @@ const ProfileSetup = () => {
       });
 
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/profile`,
+        `${process.env.REACT_APP_API_URL}/workers/profile`,
         {
           method: 'PUT',
           headers: {

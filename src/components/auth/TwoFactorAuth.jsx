@@ -208,7 +208,7 @@ const TwoFactorAuth = ({
       const idToken = await user.getIdToken();
       
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/auth/verify-2fa`,
+        `${process.env.REACT_APP_API_URL}/auth/verify-2fa`,
         {
           method: 'POST',
           headers: {

@@ -36,7 +36,7 @@ const BookingDetails = ({ bookingId, onClose, onStatusUpdate }) => {
       const token = localStorage.getItem('authToken');
       
       const response = await fetch(
-        `http://localhost:5001/api/v1/bookings/${bookingId}`,
+        `http://localhost:5001/bookings/${bookingId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

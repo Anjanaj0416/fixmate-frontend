@@ -42,7 +42,7 @@ const ChatBox = ({ conversationId, recipientUser, onBack, currentUser }) => {
       const userId = recipientUser?._id || recipientUser?.id;
 
       const response = await fetch(
-        `http://localhost:5001/api/v1/chat/conversations/${userId}`,
+        `http://localhost:5001/chat/conversations/${userId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -68,7 +68,7 @@ const ChatBox = ({ conversationId, recipientUser, onBack, currentUser }) => {
       const token = localStorage.getItem('authToken');
       const userId = recipientUser?._id || recipientUser?.id;
 
-      await fetch('http://localhost:5001/api/v1/chat/messages/read', {
+      await fetch('http://localhost:5001/chat/messages/read', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -86,7 +86,7 @@ const ChatBox = ({ conversationId, recipientUser, onBack, currentUser }) => {
       const token = localStorage.getItem('authToken');
       const userId = recipientUser?._id || recipientUser?.id;
 
-      const response = await fetch('http://localhost:5001/api/v1/chat/messages', {
+      const response = await fetch('http://localhost:5001/chat/messages', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -117,7 +117,7 @@ const ChatBox = ({ conversationId, recipientUser, onBack, currentUser }) => {
       const token = localStorage.getItem('authToken');
       
       const response = await fetch(
-        `http://localhost:5001/api/v1/chat/messages/${messageId}`,
+        `http://localhost:5001/chat/messages/${messageId}`,
         {
           method: 'DELETE',
           headers: {
@@ -141,7 +141,7 @@ const ChatBox = ({ conversationId, recipientUser, onBack, currentUser }) => {
       const token = localStorage.getItem('authToken');
       
       const response = await fetch(
-        `http://localhost:5001/api/v1/chat/messages/${messageId}/reaction`,
+        `http://localhost:5001/chat/messages/${messageId}/reaction`,
         {
           method: 'POST',
           headers: {

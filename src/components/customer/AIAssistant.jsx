@@ -70,7 +70,7 @@ const AIAssistant = ({ isOpen, onClose }) => {
 
       // Call AI API
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/ai/match-workers`,
+        `${process.env.REACT_APP_API_URL}/ai/match-workers`,
         {
           method: 'POST',
           headers: {

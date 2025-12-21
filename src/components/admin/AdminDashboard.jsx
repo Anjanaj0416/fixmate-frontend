@@ -28,7 +28,7 @@ const AdminDashboard = () => {
       const token = localStorage.getItem('authToken');
 
       // Fetch dashboard statistics
-      const statsResponse = await fetch('http://localhost:5001/api/v1/admin/dashboard', {
+      const statsResponse = await fetch('http://localhost:5001/admin/dashboard', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -36,7 +36,7 @@ const AdminDashboard = () => {
       });
 
       // Fetch analytics data
-      const analyticsResponse = await fetch('http://localhost:5001/api/v1/admin/analytics', {
+      const analyticsResponse = await fetch('http://localhost:5001/admin/analytics', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

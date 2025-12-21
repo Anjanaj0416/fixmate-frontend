@@ -30,7 +30,7 @@ const WorkerDashboard = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL}/api/v1/workers/dashboard`,
+        `${process.env.REACT_APP_API_URL}/workers/dashboard`,
         {
           headers: {
             'Authorization': `Bearer ${sessionStorage.getItem('authToken')}`,

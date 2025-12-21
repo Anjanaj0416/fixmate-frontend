@@ -37,7 +37,7 @@ const ReviewModeration = () => {
       if (filterStatus !== 'all') params.append('status', filterStatus);
 
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/reviews?${params.toString()}`,
+        `http://localhost:5001/admin/reviews?${params.toString()}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -62,7 +62,7 @@ const ReviewModeration = () => {
     try {
       const token = localStorage.getItem('authToken');
       const response = await fetch(
-        `http://localhost:5001/api/v1/admin/reviews/${reviewId}/moderate`,
+        `http://localhost:5001/admin/reviews/${reviewId}/moderate`,
         {
           method: 'PUT',
           headers: {

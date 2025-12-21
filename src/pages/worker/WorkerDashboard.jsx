@@ -54,7 +54,7 @@ const WorkerDashboard = () => {
       
       // Fetch worker profile to calculate completion
       try {
-        const profileResponse = await fetch(`${API_BASE_URL}/api/v1/workers/profile`, {
+        const profileResponse = await fetch(`${API_BASE_URL}/workers/profile`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -82,7 +82,7 @@ const WorkerDashboard = () => {
 
       // Try to fetch dashboard stats (may not exist yet)
       try {
-        const dashboardResponse = await fetch(`${API_BASE_URL}/api/v1/workers/dashboard`, {
+        const dashboardResponse = await fetch(`${API_BASE_URL}/workers/dashboard`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },

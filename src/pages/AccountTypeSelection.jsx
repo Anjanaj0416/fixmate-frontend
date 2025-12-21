@@ -79,7 +79,7 @@ function AccountTypeSelection() {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
-      const endpoint = `${apiUrl}/api/v1/auth/signup`;
+      const endpoint = `${apiUrl}/auth/signup`;
       
       console.log('🚀 Registering customer...');
 

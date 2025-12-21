@@ -44,7 +44,7 @@ const ChatList = ({ onSelectConversation, selectedConversationId, currentUser })
       const token = localStorage.getItem('authToken');
 
       const response = await fetch(
-        'http://localhost:5001/api/v1/chat/conversations',
+        'http://localhost:5001/chat/conversations',
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -71,7 +71,7 @@ const ChatList = ({ onSelectConversation, selectedConversationId, currentUser })
       const token = localStorage.getItem('authToken');
 
       const response = await fetch(
-        'http://localhost:5001/api/v1/chat/unread-count',
+        'http://localhost:5001/chat/unread-count',
         {
           headers: {
             'Authorization': `Bearer ${token}`,
