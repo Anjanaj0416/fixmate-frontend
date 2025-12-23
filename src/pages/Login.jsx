@@ -17,6 +17,16 @@ const Login = () => {
     }
   };
 
+  const handleBackToHome = () => {
+    console.log('🏠 Back to Home button clicked');
+    try {
+      navigate('/');
+      console.log('✅ Navigation to home successful');
+    } catch (error) {
+      console.error('❌ Navigation error:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-700 flex items-center justify-center p-4">
       {/* Background decoration */}
@@ -27,10 +37,11 @@ const Login = () => {
       </div>
 
       <div className="relative w-full max-w-md">
-        {/* Back to home button */}
+        {/* Back to home button - FIXED */}
         <button
-          onClick={() => navigate('/')}
-          className="flex items-center text-white mb-6 hover:text-indigo-200 transition"
+          type="button"
+          onClick={handleBackToHome}
+          className="flex items-center text-white mb-6 hover:text-indigo-200 transition cursor-pointer"
         >
           <ArrowLeft className="w-5 h-5 mr-2" />
           <span>Back to Home</span>
