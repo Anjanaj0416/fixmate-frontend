@@ -3,24 +3,30 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, MapPin, Star, Send, User, CheckCircle, AlertCircle, Eye } from 'lucide-react';
 import apiService from '../services/apiService';
 
+// Note: This component does NOT use WorkerList to avoid "process is not defined" errors
+
 /**
  * FindWorkers Component
  * Displays available workers based on quote request location and service type
  * Allows customers to view worker profiles and send quote requests
+ * 
+ * ✅ FIXED: Properly passes serviceType and location to API
+ * ✅ FIXED: Handles response data structure correctly
  */
-const FindWorkers = () => {
+function FindWorkers() {
   const navigate = useNavigate();
   const location = useLocation();
   const { quoteRequestId, serviceType, location: serviceLocation, category } = location.state || {};
 
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sendingTo, setSendingTo] = useState(null); // Track which worker quote is being sent to
-  const [sentTo, setSentTo] = useState([]); // Track which workers have received the quote
+  const [sendingTo, setSendingTo] = useState(null);
+  const [sentTo, setSentTo] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!quoteRequestId || !serviceType || !serviceLocation) {
+      console.error('❌ Missing required data:', { quoteRequestId, serviceType, serviceLocation });
       navigate('/customer/service-selection');
       return;
     }
@@ -33,29 +39,42 @@ const FindWorkers = () => {
       setLoading(true);
       setError('');
 
-      console.log('🔍 Searching for workers...', {
+      console.log('🔍 Searching for workers with:', {
         serviceType,
+        district: serviceLocation?.district,
+        town: serviceLocation?.town,
         location: serviceLocation
       });
 
-      // ✅ Fetch workers by service type and location
-      const response = await apiService.get('/workers/search', {
-        params: {
-          serviceType: serviceType,
-          district: serviceLocation.district,
-          town: serviceLocation.town,
-          // Optional: Add more filters
-          availability: true,
-          verified: true
-        }
-      });
+      // ✅ FIXED: Properly construct params object
+      const params = {
+        serviceType: serviceType,
+        district: serviceLocation?.district,
+        town: serviceLocation?.town,
+        availability: true,
+        verified: true
+      };
 
-      console.log('✅ Workers found:', response.data.data.workers.length);
-      setWorkers(response.data.data.workers || []);
+      console.log('📤 API Request params:', params);
+
+      // ✅ Use apiService with params
+      const response = await apiService.get('/workers/search', { params });
+
+      console.log('✅ API Response:', response);
+
+      // ✅ FIXED: Handle response structure correctly
+      const workersData = response?.data?.data?.workers || response?.data?.workers || [];
+      
+      console.log(`✅ Found ${workersData.length} workers`);
+      setWorkers(workersData);
+
+      if (workersData.length === 0) {
+        setError(`No workers found for ${serviceType} in ${serviceLocation?.town}, ${serviceLocation?.district}. Try expanding your search area.`);
+      }
 
     } catch (error) {
       console.error('❌ Error fetching workers:', error);
-      setError(error.response?.data?.message || 'Failed to load workers. Please try again.');
+      setError(error.response?.data?.message || error.message || 'Failed to load workers. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,17 +87,13 @@ const FindWorkers = () => {
 
       console.log('📤 Sending quote to worker:', workerId);
 
-      // ✅ Send quote request to specific worker
       const response = await apiService.post(`/bookings/${quoteRequestId}/send-to-worker`, {
         workerId: workerId
       });
 
       console.log('✅ Quote sent successfully');
 
-      // Add worker to sent list
       setSentTo(prev => [...prev, workerId]);
-
-      // Show success message (you can use a toast notification here)
       alert('Quote request sent successfully!');
 
     } catch (error) {
@@ -103,7 +118,6 @@ const FindWorkers = () => {
     navigate('/customer/bookings');
   };
 
-  // Helper function to get worker rating display
   const getRatingDisplay = (worker) => {
     const rating = worker.averageRating || 0;
     const reviewCount = worker.totalReviews || 0;
@@ -115,7 +129,6 @@ const FindWorkers = () => {
     };
   };
 
-  // Helper function to format distance (if available)
   const formatDistance = (distance) => {
     if (!distance) return null;
     if (distance < 1) {
@@ -132,15 +145,15 @@ const FindWorkers = () => {
           <div className="flex items-center gap-4 mb-4">
             <button
               onClick={handleBack}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeft size={20} />
-              Back
+              <span>Back</span>
             </button>
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Available Workers</h1>
           <p className="text-gray-600 mt-2">
-            {category?.name} in {serviceLocation?.town}, {serviceLocation?.district}
+            {serviceType} in {serviceLocation?.town}, {serviceLocation?.district}
           </p>
         </div>
       </div>
@@ -151,7 +164,10 @@ const FindWorkers = () => {
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-start gap-3">
               <AlertCircle size={20} className="text-red-600 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800">{error}</p>
+              <div>
+                <p className="text-sm font-medium text-red-800 mb-1">Unable to find workers</p>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
             </div>
           </div>
         )}
@@ -164,204 +180,163 @@ const FindWorkers = () => {
           </div>
         )}
 
-        {/* No Workers Found */}
-        {!loading && workers.length === 0 && (
-          <div className="bg-white rounded-lg shadow-md p-8 text-center">
-            <User size={48} className="text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">No workers found</h3>
-            <p className="text-gray-600 mb-6">
-              We couldn't find any workers in {serviceLocation?.town} for {category?.name}.
-            </p>
-            <p className="text-sm text-gray-500 mb-4">
-              Try searching in nearby towns or post your request to our worker network.
-            </p>
-            <button
-              onClick={handleBack}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              View My Bookings
-            </button>
-          </div>
-        )}
-
-        {/* Workers Grid */}
+        {/* Workers List */}
         {!loading && workers.length > 0 && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <p className="text-gray-600">
-                Found {workers.length} worker{workers.length !== 1 ? 's' : ''} near you
-              </p>
-            </div>
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {workers.map((worker) => {
+              const ratingData = getRatingDisplay(worker);
+              const distance = formatDistance(worker.distance);
+              const isSent = sentTo.includes(worker._id);
+              const isSending = sendingTo === worker._id;
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {workers.map((worker) => {
-                const ratingDisplay = getRatingDisplay(worker);
-                const isSent = sentTo.includes(worker._id);
-                const isSending = sendingTo === worker._id;
+              return (
+                <div
+                  key={worker._id}
+                  className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden"
+                >
+                  {/* Worker Image */}
+                  <div className="h-48 bg-gradient-to-br from-indigo-500 to-purple-600 relative">
+                    {worker.userId?.profileImage ? (
+                      <img
+                        src={worker.userId.profileImage}
+                        alt={worker.userId?.fullName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <User size={64} className="text-white opacity-50" />
+                      </div>
+                    )}
+                    {worker.isVerified && (
+                      <div className="absolute top-3 right-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
+                        <CheckCircle size={12} />
+                        Verified
+                      </div>
+                    )}
+                  </div>
 
-                return (
-                  <div
-                    key={worker._id}
-                    className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
-                  >
-                    {/* Worker Image */}
-                    <div className="relative h-48 bg-gray-200">
-                      {worker.profileImage ? (
-                        <img
-                          src={worker.profileImage}
-                          alt={worker.userId?.fullName}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <User size={64} className="text-gray-400" />
-                        </div>
-                      )}
-                      
-                      {/* Verified Badge */}
-                      {worker.isVerified && (
-                        <div className="absolute top-3 right-3 bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1">
-                          <CheckCircle size={12} />
-                          Verified
-                        </div>
+                  {/* Worker Info */}
+                  <div className="p-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {worker.userId?.fullName || 'Unknown Worker'}
+                    </h3>
+                    
+                    {/* Service Categories */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {worker.serviceCategories?.slice(0, 2).map((category, index) => (
+                        <span
+                          key={index}
+                          className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded-full"
+                        >
+                          {category}
+                        </span>
+                      ))}
+                      {worker.serviceCategories?.length > 2 && (
+                        <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full">
+                          +{worker.serviceCategories.length - 2} more
+                        </span>
                       )}
                     </div>
 
-                    {/* Worker Info */}
-                    <div className="p-4">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        {worker.userId?.fullName || 'Worker'}
-                      </h3>
-
-                      {/* Rating */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="flex items-center gap-1">
-                          <Star size={16} className="text-yellow-400 fill-current" />
-                          <span className="text-sm font-medium text-gray-900">
-                            {ratingDisplay.rating}
-                          </span>
-                        </div>
-                        <span className="text-sm text-gray-500">
-                          ({ratingDisplay.count} review{ratingDisplay.count !== 1 ? 's' : ''})
-                        </span>
+                    {/* Rating */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-1">
+                        <Star size={16} className="text-yellow-400 fill-yellow-400" />
+                        <span className="font-medium text-gray-900">{ratingData.rating}</span>
                       </div>
+                      <span className="text-sm text-gray-500">
+                        ({ratingData.count} {ratingData.count === 1 ? 'review' : 'reviews'})
+                      </span>
+                    </div>
 
-                      {/* Location */}
-                      {worker.serviceAreas && worker.serviceAreas.length > 0 && (
-                        <div className="flex items-start gap-2 mb-3">
-                          <MapPin size={16} className="text-gray-400 flex-shrink-0 mt-0.5" />
-                          <p className="text-sm text-gray-600">
-                            {worker.serviceAreas.slice(0, 2).map(area => area.town).join(', ')}
-                            {worker.serviceAreas.length > 2 && ` +${worker.serviceAreas.length - 2} more`}
-                          </p>
-                        </div>
-                      )}
+                    {/* Location */}
+                    {distance && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                        <MapPin size={14} />
+                        <span>{distance}</span>
+                      </div>
+                    )}
 
-                      {/* Experience */}
-                      {worker.experience && (
-                        <p className="text-sm text-gray-600 mb-3">
-                          {worker.experience} years experience
+                    {/* Service Areas */}
+                    {worker.serviceAreas && worker.serviceAreas.length > 0 && (
+                      <div className="mb-4">
+                        <p className="text-xs text-gray-500 mb-1">Service Areas:</p>
+                        <p className="text-sm text-gray-700">
+                          {worker.serviceAreas.map(area => area.town).join(', ')}
                         </p>
-                      )}
+                      </div>
+                    )}
 
-                      {/* Skills */}
-                      {worker.skills && worker.skills.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-4">
-                          {worker.skills.slice(0, 3).map((skill, index) => (
-                            <span
-                              key={index}
-                              className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                          {worker.skills.length > 3 && (
-                            <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
-                              +{worker.skills.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Action Buttons */}
-                      <div className="flex gap-2">
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleViewProfile(worker._id)}
+                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Eye size={16} />
+                        View Profile
+                      </button>
+                      
+                      {isSent ? (
                         <button
-                          onClick={() => handleViewProfile(worker._id)}
-                          className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                          disabled
+                          className="flex-1 px-4 py-2 bg-green-100 text-green-700 rounded-lg flex items-center justify-center gap-2 cursor-not-allowed"
                         >
-                          <Eye size={16} />
-                          <span className="text-sm font-medium">View Profile</span>
+                          <CheckCircle size={16} />
+                          Sent
                         </button>
-
+                      ) : (
                         <button
                           onClick={() => handleSendQuote(worker._id)}
-                          disabled={isSent || isSending}
-                          className={`flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                            isSent
-                              ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
-                              : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                          }`}
+                          disabled={isSending}
+                          className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isSending ? (
                             <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              <span className="text-sm font-medium">Sending...</span>
-                            </>
-                          ) : isSent ? (
-                            <>
-                              <CheckCircle size={16} />
-                              <span className="text-sm font-medium">Sent</span>
+                              <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                              Sending...
                             </>
                           ) : (
                             <>
                               <Send size={16} />
-                              <span className="text-sm font-medium">Send Quote</span>
+                              Send Quote
                             </>
                           )}
                         </button>
-                      </div>
+                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-
-            {/* Info Box */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
-              <p className="text-sm text-blue-900">
-                <strong>💡 Tip:</strong> View worker profiles to see their previous work, customer reviews, 
-                and detailed ratings before sending your quote request. Workers will receive a notification 
-                and can respond with their availability and pricing.
-              </p>
-            </div>
-
-            {/* Sent Quotes Summary */}
-            {sentTo.length > 0 && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-green-900">
-                      Quote request sent to {sentTo.length} worker{sentTo.length !== 1 ? 's' : ''}
-                    </p>
-                    <p className="text-sm text-green-700 mt-1">
-                      You can track responses in your bookings page. Workers typically respond within 24 hours.
-                    </p>
-                    <button
-                      onClick={handleBack}
-                      className="mt-3 text-sm font-medium text-green-700 hover:text-green-800 underline"
-                    >
-                      Go to My Bookings
-                    </button>
-                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })}
+          </div>
+        )}
+
+        {/* No Workers Found */}
+        {!loading && workers.length === 0 && (
+          <div className="bg-white rounded-lg shadow-md p-12 text-center">
+            <User size={64} className="text-gray-300 mx-auto mb-4" />
+            <h3 className="text-2xl font-semibold text-gray-900 mb-2">No workers found</h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              We couldn't find any workers for {serviceType} in {serviceLocation?.town}, {serviceLocation?.district}.
+              This might be because:
+            </p>
+            <ul className="text-left text-gray-600 mb-6 max-w-md mx-auto space-y-2">
+              <li>• No workers serve this area yet</li>
+              <li>• All workers are currently unavailable</li>
+              <li>• Try selecting a different location or service type</li>
+            </ul>
+            <button
+              onClick={() => navigate('/customer/quote-request', { state: location.state })}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              Modify Search Criteria
+            </button>
           </div>
         )}
       </div>
     </div>
   );
-};
+}
 
 export default FindWorkers;

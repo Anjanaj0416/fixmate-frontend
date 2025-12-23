@@ -5,6 +5,8 @@ import storage from '../utils/storage';
  * API Service with Automatic Token Refresh
  * 
  * ✅ FIXED: Now properly parses JSON responses
+ * ✅ FIXED: Uses import.meta.env for Vite compatibility
+ * ✅ FIXED: Proper endpoint handling with /api/v1 prefix
  * 
  * This service handles all API requests with automatic Firebase token refresh
  * to prevent "Session expired" errors.
@@ -14,7 +16,7 @@ import storage from '../utils/storage';
  * - Retry logic for 401 errors
  * - Consistent token storage
  * - Support for all HTTP methods
- * - ✅ Proper JSON parsing
+ * - Proper JSON parsing
  * 
  * Usage:
  * import apiService from '../services/apiService';
@@ -23,7 +25,10 @@ import storage from '../utils/storage';
  * const data = await apiService.post('/bookings/quote-request', requestData);
  */
 
+// ✅ FIXED: Use import.meta.env for Vite, keep base URL without /api/v1
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
+console.log('🔧 API Service initialized with base URL:', API_BASE_URL);
 
 class APIService {
   /**
@@ -56,7 +61,7 @@ class APIService {
 
   /**
    * Make HTTP request with automatic token refresh
-   * @param {string} endpoint - API endpoint (e.g., '/users/profile')
+   * @param {string} endpoint - API endpoint (e.g., '/users/profile' or '/api/v1/users/profile')
    * @param {object} options - Fetch options
    * @returns {Promise<object>} ✅ FIXED: Returns parsed JSON data, not Response object
    */
@@ -65,16 +70,24 @@ class APIService {
       // Get fresh token
       const token = await this.getFreshToken();
 
-      // ✅ FIXED: Ensure endpoint doesn't have double 
+      // ✅ FIXED: Smart endpoint handling
+      // If endpoint doesn't start with /api/v1, add it
       let cleanEndpoint = endpoint;
-      if (endpoint.startsWith('')) {
-        cleanEndpoint = endpoint.replace('', '');
+      
+      // Remove leading slash if present
+      if (cleanEndpoint.startsWith('/')) {
+        cleanEndpoint = cleanEndpoint.slice(1);
+      }
+      
+      // Add /api/v1 prefix if not already present
+      if (!cleanEndpoint.startsWith('api/v1')) {
+        cleanEndpoint = `api/v1/${cleanEndpoint}`;
       }
 
       // Prepare full URL
       const url = endpoint.startsWith('http') 
         ? endpoint 
-        : `${API_BASE_URL}${cleanEndpoint}`;
+        : `${API_BASE_URL}/${cleanEndpoint}`;
 
       console.log('🌐 API Request:', options.method || 'GET', url);
 
@@ -112,7 +125,7 @@ class APIService {
         // ✅ FIXED: Parse JSON before returning
         if (retryResponse.ok) {
           const data = await retryResponse.json();
-          console.log('✅ API Response:', data);
+          console.log('✅ API Response (after retry):', data);
           return data;
         } else {
           const errorData = await retryResponse.json().catch(() => ({}));
@@ -146,7 +159,11 @@ class APIService {
   async get(endpoint, options = {}) {
     // Handle query parameters
     if (options.params) {
-      const queryString = new URLSearchParams(options.params).toString();
+      // ✅ FIXED: Filter out null/undefined values before creating query string
+      const filteredParams = Object.fromEntries(
+        Object.entries(options.params).filter(([_, v]) => v != null && v !== '')
+      );
+      const queryString = new URLSearchParams(filteredParams).toString();
       endpoint = `${endpoint}${queryString ? '?' + queryString : ''}`;
       delete options.params;
     }
@@ -226,15 +243,22 @@ class APIService {
     try {
       const token = await this.getFreshToken();
 
-      // ✅ FIXED: Ensure endpoint doesn't have double 
+      // ✅ FIXED: Smart endpoint handling (same as request method)
       let cleanEndpoint = endpoint;
-      if (endpoint.startsWith('')) {
-        cleanEndpoint = endpoint.replace('', '');
+      
+      // Remove leading slash if present
+      if (cleanEndpoint.startsWith('/')) {
+        cleanEndpoint = cleanEndpoint.slice(1);
+      }
+      
+      // Add /api/v1 prefix if not already present
+      if (!cleanEndpoint.startsWith('api/v1')) {
+        cleanEndpoint = `api/v1/${cleanEndpoint}`;
       }
 
       const url = endpoint.startsWith('http') 
         ? endpoint 
-        : `${API_BASE_URL}${cleanEndpoint}`;
+        : `${API_BASE_URL}/${cleanEndpoint}`;
 
       console.log('📤 Upload Request:', url);
 
@@ -275,7 +299,7 @@ class APIService {
         // ✅ FIXED: Parse JSON before returning
         if (retryResponse.ok) {
           const data = await retryResponse.json();
-          console.log('✅ Upload Response:', data);
+          console.log('✅ Upload Response (after retry):', data);
           return data;
         } else {
           const errorData = await retryResponse.json().catch(() => ({}));
