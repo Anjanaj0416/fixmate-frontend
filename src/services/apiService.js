@@ -6,7 +6,7 @@ import storage from '../utils/storage';
  * 
  * ✅ FIXED: Now properly parses JSON responses
  * ✅ FIXED: Uses import.meta.env for Vite compatibility
- * ✅ FIXED: Proper endpoint handling with /api/v1 prefix
+ * ✅ FIXED: Proper endpoint handling with / prefix
  * 
  * This service handles all API requests with automatic Firebase token refresh
  * to prevent "Session expired" errors.
@@ -25,7 +25,7 @@ import storage from '../utils/storage';
  * const data = await apiService.post('/bookings/quote-request', requestData);
  */
 
-// ✅ FIXED: Use import.meta.env for Vite, keep base URL without /api/v1
+// ✅ FIXED: Use import.meta.env for Vite, keep base URL without /
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
 console.log('🔧 API Service initialized with base URL:', API_BASE_URL);
@@ -61,7 +61,7 @@ class APIService {
 
   /**
    * Make HTTP request with automatic token refresh
-   * @param {string} endpoint - API endpoint (e.g., '/users/profile' or '/api/v1/users/profile')
+   * @param {string} endpoint - API endpoint (e.g., '/users/profile' or '//users/profile')
    * @param {object} options - Fetch options
    * @returns {Promise<object>} ✅ FIXED: Returns parsed JSON data, not Response object
    */
@@ -71,7 +71,7 @@ class APIService {
       const token = await this.getFreshToken();
 
       // ✅ FIXED: Smart endpoint handling
-      // If endpoint doesn't start with /api/v1, add it
+      // If endpoint doesn't start with /, add it
       let cleanEndpoint = endpoint;
       
       // Remove leading slash if present
@@ -79,9 +79,9 @@ class APIService {
         cleanEndpoint = cleanEndpoint.slice(1);
       }
       
-      // Add /api/v1 prefix if not already present
-      if (!cleanEndpoint.startsWith('api/v1')) {
-        cleanEndpoint = `api/v1/${cleanEndpoint}`;
+      // Add / prefix if not already present
+      if (!cleanEndpoint.startsWith('')) {
+        cleanEndpoint = `/${cleanEndpoint}`;
       }
 
       // Prepare full URL
@@ -251,9 +251,9 @@ class APIService {
         cleanEndpoint = cleanEndpoint.slice(1);
       }
       
-      // Add /api/v1 prefix if not already present
-      if (!cleanEndpoint.startsWith('api/v1')) {
-        cleanEndpoint = `api/v1/${cleanEndpoint}`;
+      // Add / prefix if not already present
+      if (!cleanEndpoint.startsWith('')) {
+        cleanEndpoint = `/${cleanEndpoint}`;
       }
 
       const url = endpoint.startsWith('http') 

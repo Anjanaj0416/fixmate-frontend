@@ -16,8 +16,8 @@ import NotFound from '../pages/NotFound';
 
 // Customer pages
 import CustomerDashboard from '../pages/customer/CustomerDashboard';
-import FindWorkers from '../pages/customer/FindWorkers';
-import WorkerProfile from '../pages/customer/WorkerProfile';
+import FindWorkers from '../pages/FindWorkers';
+import WorkerProfile from '../pages/WorkerProfile';
 import MyBookings from '../pages/customer/MyBookings';
 import Favorites from '../pages/customer/Favorites';
 import CustomerProfile from '../pages/customer/Profile';
