@@ -54,7 +54,7 @@ const WorkerProfile = () => {
       console.log('📋 Fetching worker profile:', workerId);
       console.log('🌐 API URL:', import.meta.env.VITE_API_URL || 'http://localhost:5001');
 
-      const response = await apiService.get(`/api/v1/workers/${workerId}/profile`);
+      const response = await apiService.get(`/workers/${workerId}/profile`);
       
       console.log('📦 Full API Response:', response);
       console.log('📊 Response data structure:', JSON.stringify(response.data, null, 2));
@@ -131,7 +131,7 @@ const WorkerProfile = () => {
       });
 
       const response = await apiService.post(
-        `/api/v1/bookings/${quoteRequestId}/send-to-worker`,
+        `/bookings/${quoteRequestId}/send-to-worker`,
         { workerId: workerId }
       );
 
