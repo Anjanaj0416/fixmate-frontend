@@ -66,7 +66,7 @@ const CustomerDashboard = () => {
   const handleSignOut = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       try {
-        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001/api/v1';
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
         
         // Call backend logout endpoint
         await fetch(`${API_URL}/auth/logout`, {
