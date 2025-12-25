@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, Wrench, ArrowRight, CheckCircle } from 'lucide-react';
 import { Button } from '../components/common';
+import { getAuth } from 'firebase/auth';
 
 /**
  * Account Type Selection Component
- * ✅ FIXED: Workers navigate to registration flow FIRST, then register with complete data
+ * ✅ FIXED: Proper token refresh and customer navigation
  */
 function AccountTypeSelection() {
   const navigate = useNavigate();
+  const auth = getAuth();
   const [selectedRole, setSelectedRole] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -18,6 +20,7 @@ function AccountTypeSelection() {
     const data = sessionStorage.getItem('tempUserData');
     
     if (!data) {
+      console.warn('⚠️ No temp user data found, redirecting to signup');
       navigate('/signup');
       return;
     }
@@ -31,7 +34,7 @@ function AccountTypeSelection() {
       console.log('Firebase UID:', parsedData.firebaseUid);
       console.log('Has Token:', !!parsedData.idToken);
     } catch (err) {
-      console.error('Error:', err);
+      console.error('❌ Parse error:', err);
       setError('Invalid registration data. Please start again.');
       setTimeout(() => navigate('/signup'), 3000);
     }
@@ -72,50 +75,108 @@ function AccountTypeSelection() {
     setError('');
   };
 
-  // ✅ NEW: Separate function for customer registration
+  // ✅ CRITICAL FIX: Get fresh Firebase token before registration
+  const getFreshToken = async () => {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('No authenticated user found');
+      }
+      
+      console.log('🔄 Refreshing Firebase token...');
+      const freshToken = await currentUser.getIdToken(true); // Force refresh
+      console.log('✅ Fresh token obtained (length:', freshToken.length, ')');
+      return freshToken;
+    } catch (error) {
+      console.error('❌ Token refresh failed:', error);
+      throw new Error('Failed to refresh authentication token. Please try logging in again.');
+    }
+  };
+
+  // ✅ FIXED: Customer registration with fresh token
   const registerCustomer = async () => {
     setLoading(true);
     setError('');
 
     try {
+      console.log('\n🚀 Starting customer registration...');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // Step 1: Get fresh token
+      const freshToken = await getFreshToken();
+      
+      // Step 2: Prepare registration data
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
       const endpoint = `${apiUrl}/auth/signup`;
       
-      console.log('🚀 Registering customer...');
-
       const registrationData = {
         firebaseUid: tempUserData.firebaseUid,
         email: tempUserData.email,
-        phoneNumber: tempUserData.phoneNumber,
-        fullName: tempUserData.name || tempUserData.fullName || `${tempUserData.firstName} ${tempUserData.lastName}`,
+        phoneNumber: tempUserData.phoneNumber || '',
+        fullName: tempUserData.name || tempUserData.fullName || `${tempUserData.firstName || ''} ${tempUserData.lastName || ''}`.trim(),
         role: 'customer',
-        firstName: tempUserData.firstName,
-        lastName: tempUserData.lastName,
-        address: tempUserData.address,
+        firstName: tempUserData.firstName || '',
+        lastName: tempUserData.lastName || '',
+        address: tempUserData.address || '',
       };
 
+      console.log('📤 Sending registration request...');
+      console.log('Endpoint:', endpoint);
+      console.log('Email:', registrationData.email);
+      console.log('Role:', registrationData.role);
+
+      // Step 3: Make registration API call
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${tempUserData.idToken}`
+          'Authorization': `Bearer ${freshToken}` // ✅ Use fresh token
         },
         body: JSON.stringify(registrationData)
       });
 
       const data = await response.json();
 
+      console.log('📥 Registration response:', {
+        status: response.status,
+        success: data.success,
+        message: data.message
+      });
+
       if (!response.ok) {
         throw new Error(data.message || `Registration failed: ${response.status}`);
       }
 
       console.log('✅ Customer registration successful!');
+      console.log('User ID:', data.data?.user?.id);
+      console.log('Customer ID:', data.data?.customer?.id);
 
-      sessionStorage.setItem('authToken', data.token || tempUserData.idToken);
-      sessionStorage.setItem('user', JSON.stringify(data.data?.user || data.user));
+      // ✅ CRITICAL FIX: Save BOTH token and user data to sessionStorage AND localStorage
+      const userDataToSave = {
+        id: data.data?.user?.id,
+        email: data.data?.user?.email,
+        fullName: data.data?.user?.fullName,
+        role: 'customer',
+        firebaseUid: data.data?.user?.firebaseUid,
+        customerId: data.data?.customer?.id
+      };
+
+      // Save to both storages for reliability
+      sessionStorage.setItem('authToken', freshToken);
+      sessionStorage.setItem('user', JSON.stringify(userDataToSave));
+      localStorage.setItem('authToken', freshToken);
+      localStorage.setItem('user', JSON.stringify(userDataToSave));
+      
+      console.log('💾 User data saved to storage');
+
+      // Remove temp data
       sessionStorage.removeItem('tempUserData');
+      
+      console.log('🎯 Navigating to customer dashboard...');
+      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-      navigate('/customer/dashboard');
+      // Step 4: Navigate to customer dashboard
+      navigate('/customer/dashboard', { replace: true });
 
     } catch (err) {
       console.error('❌ Registration error:', err);
@@ -126,6 +187,13 @@ function AccountTypeSelection() {
         errorMessage = 'Cannot connect to server. Please check if backend is running on port 5001.';
       } else if (err.message.includes('already exists')) {
         errorMessage = 'This account already exists. Please login instead.';
+      } else if (err.message.includes('token')) {
+        errorMessage = 'Authentication token expired. Please sign up again.';
+        // Redirect to signup if token issue
+        setTimeout(() => {
+          sessionStorage.removeItem('tempUserData');
+          navigate('/signup');
+        }, 3000);
       } else {
         errorMessage += err.message;
       }
@@ -154,16 +222,14 @@ function AccountTypeSelection() {
       return;
     }
 
-    console.log('🎯 Navigating to registration flow for:', selectedRole);
+    console.log('🎯 Processing registration for:', selectedRole);
 
     if (selectedRole === 'customer') {
-      // Customers register immediately (no additional profile data needed)
+      // Customers register immediately
       registerCustomer();
     } else if (selectedRole === 'worker') {
-      // ✅ NEW APPROACH: Workers navigate to complete registration form FIRST
-      // Registration happens AFTER they fill out the complete profile
+      // Workers navigate to registration form
       console.log('→ Navigating to Worker Registration Flow');
-      console.log('📝 Worker will fill complete profile before registration');
       navigate('/worker-registration');
     }
   };
@@ -194,16 +260,13 @@ function AccountTypeSelection() {
 
         {/* Error Message */}
         {error && (
-          <div className="max-w-2xl mx-auto mb-8">
-            <div className="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-lg">
-              <p className="font-medium">Error</p>
-              <p className="text-sm mt-1">{error}</p>
-            </div>
+          <div className="max-w-md mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-800">{error}</p>
           </div>
         )}
 
         {/* Account Type Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+        <div className="grid md:grid-cols-2 gap-8 mb-12">
           {accountTypes.map((type) => {
             const Icon = type.icon;
             const isSelected = selectedRole === type.id;
@@ -213,40 +276,41 @@ function AccountTypeSelection() {
                 key={type.id}
                 onClick={() => handleRoleSelection(type.id)}
                 className={`
-                  relative bg-white rounded-2xl shadow-lg p-8 cursor-pointer
-                  transition-all duration-300 transform hover:scale-105
+                  relative p-8 rounded-2xl cursor-pointer transition-all duration-300
                   ${isSelected 
-                    ? 'ring-4 ring-indigo-500 ring-opacity-50 shadow-2xl' 
-                    : 'hover:shadow-xl'
+                    ? `bg-${type.color}-50 border-2 border-${type.color}-500 shadow-lg transform scale-105` 
+                    : 'bg-white border-2 border-gray-200 hover:border-gray-300 hover:shadow-md'
                   }
                 `}
               >
                 {isSelected && (
-                  <div className="absolute top-4 right-4">
-                    <CheckCircle className="h-8 w-8 text-indigo-600" />
+                  <div className={`absolute top-4 right-4 bg-${type.color}-500 text-white rounded-full p-1.5`}>
+                    <CheckCircle className="h-5 w-5" />
                   </div>
                 )}
 
                 <div className={`
-                  inline-flex items-center justify-center w-16 h-16 rounded-full mb-6
-                  ${isSelected ? 'bg-indigo-100' : 'bg-gray-100'}
+                  inline-flex p-4 rounded-xl mb-4
+                  ${isSelected ? `bg-${type.color}-100` : 'bg-gray-100'}
                 `}>
-                  <Icon className={`h-8 w-8 ${isSelected ? 'text-indigo-600' : 'text-gray-600'}`} />
+                  <Icon className={`
+                    h-12 w-12
+                    ${isSelected ? `text-${type.color}-600` : 'text-gray-600'}
+                  `} />
                 </div>
 
-                <h3 className="text-2xl font-bold text-gray-900 mb-3">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">
                   {type.title}
                 </h3>
-
                 <p className="text-gray-600 mb-6">
                   {type.description}
                 </p>
 
                 <ul className="space-y-3">
                   {type.features.map((feature, index) => (
-                    <li key={index} className="flex items-start">
+                    <li key={index} className="flex items-center gap-3">
                       <CheckCircle className={`
-                        h-5 w-5 mr-3 mt-0.5 flex-shrink-0
+                        h-5 w-5 flex-shrink-0
                         ${isSelected ? 'text-indigo-600' : 'text-gray-400'}
                       `} />
                       <span className="text-gray-700">{feature}</span>
@@ -294,13 +358,13 @@ function AccountTypeSelection() {
           </div>
         </div>
 
-        {/* Debug Info */}
+        {/* Debug Info (DEV only) */}
         {import.meta.env.DEV && (
           <div className="mt-8 p-4 bg-gray-100 rounded-lg text-xs font-mono max-w-2xl mx-auto">
             <div className="font-bold mb-2">Debug Info:</div>
             <div>Email: {tempUserData.email}</div>
             <div>Firebase UID: {tempUserData.firebaseUid || '❌ MISSING'}</div>
-            <div>Has Token: {tempUserData.idToken ? 'Yes' : 'No'}</div>
+            <div>Has Token: {tempUserData.idToken ? 'Yes ✅' : 'No ❌'}</div>
             <div>Phone: {tempUserData.phoneNumber}</div>
             <div>Name: {tempUserData.name || `${tempUserData.firstName} ${tempUserData.lastName}`}</div>
             <div>API URL: {import.meta.env.VITE_API_URL || 'http://localhost:5001 (default)'}</div>

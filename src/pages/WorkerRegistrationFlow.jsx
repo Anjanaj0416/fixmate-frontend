@@ -5,6 +5,7 @@ import {
   Wrench, Hammer, Zap, Paintbrush, Building, Camera,
   MapPin, Clock, DollarSign, Check, X, AlertCircle
 } from 'lucide-react';
+import { getAuth } from 'firebase/auth';
 import axios from 'axios';
 
 /**
@@ -308,24 +309,33 @@ const WorkerRegistrationFlow = () => {
       console.log('\n🚀 Starting worker registration...');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
-      // ✅ CRITICAL: Verify we have required data
+      // ✅ CRITICAL FIX: Get fresh Firebase token
+      const auth = getAuth();
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        throw new Error('No authenticated user found. Please sign up again.');
+      }
+
+      console.log('🔄 Refreshing Firebase token...');
+      const freshToken = await currentUser.getIdToken(true); // Force refresh
+      console.log('✅ Fresh token obtained (length:', freshToken.length, ')');
+
+      // ✅ Verify we have required data
       if (!tempUserData.firebaseUid) {
         throw new Error('Missing Firebase UID. Please sign up again.');
       }
       if (!tempUserData.email) {
         throw new Error('Missing email. Please sign up again.');
       }
-      if (!tempUserData.idToken) {
-        throw new Error('Missing authentication token. Please sign up again.');
-      }
 
       console.log('✅ Temp user data validated:', {
         email: tempUserData.email,
         firebaseUid: tempUserData.firebaseUid.substring(0, 10) + '...',
-        hasToken: !!tempUserData.idToken
+        hasToken: true
       });
 
-      // ✅ FIXED: Prepare worker registration data with CORRECTED structure
+      // ✅ Prepare worker registration data with CORRECTED structure
       const workerData = {
         // Basic user info
         firstName: tempUserData.firstName || '',
@@ -337,85 +347,80 @@ const WorkerRegistrationFlow = () => {
         role: 'worker',
         firebaseUid: tempUserData.firebaseUid,
 
-        // ✅ FIXED: Service category as array (matches Worker model enum)
+        // ✅ Service category as array (matches Worker model enum)
         serviceCategories: [formData.serviceType],
 
-        // ✅ FIXED: Detailed specializations (flexible strings)
+        // ✅ Detailed specializations (flexible strings)
         specializations: formData.specializations || [],
 
         // Experience
         experience: formData.yearsOfExperience ? parseInt(formData.yearsOfExperience, 10) : 0,
 
         // Pricing - using hourlyRate to match Worker model
-        // Converting dailyWage to approximate hourly rate (assuming 8-hour day)
-        hourlyRate: formData.dailyWage ? Math.round(parseInt(formData.dailyWage, 10) / 8) : 0,
+        hourlyRate: formData.dailyWage ?
+          Math.round(parseInt(formData.dailyWage, 10) / 8) : // Convert daily to hourly (8-hour day)
+          0,
 
-        // Skills - combining languages and other skills
-        skills: [
-          ...(formData.languagesSpoken || []),
-          // You can add other skills here
-        ],
+        // Skills
+        skills: formData.skills || [],
 
-        // Bio
-        bio: formData.bio || '',
+        // Bio/Description
+        bio: formData.bio || formData.description || '',
 
         // Service locations
-        serviceLocations: [{
-          city: formData.serviceCity || formData.city || '',
-          district: formData.serviceProvince || 'Western'
-        }],
+        serviceLocations: formData.serviceLocations || [],
 
         // Availability
-        availability: formData.availableDays && formData.availableDays.length > 0,
+        availability: true,
 
-        // ✅ FIXED: Working hours - convert to Worker model format
+        // Working hours
         workingHours: {
           monday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Monday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Monday') || true
           },
           tuesday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Tuesday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Tuesday') || true
           },
           wednesday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Wednesday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Wednesday') || true
           },
           thursday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Thursday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Thursday') || true
           },
           friday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Friday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Friday') || true
           },
           saturday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Saturday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Saturday') || false
           },
           sunday: {
-            start: formData.workingHours.startTime || '08:00',
-            end: formData.workingHours.endTime || '18:00',
-            available: formData.availableDays.includes('Sunday')
+            start: formData.workingHours?.startTime || '08:00',
+            end: formData.workingHours?.endTime || '18:00',
+            available: formData.availableDays?.includes('Sunday') || false
           }
         },
 
-        // Additional settings from Step 7
+        // Additional settings
         settings: {
-          availableOnWeekends: formData.availableOnWeekends,
-          emergencyServices: formData.emergencyServices,
-          ownTools: formData.ownTools,
-          vehicleAvailable: formData.vehicleAvailable,
-          certified: formData.certified,
-          insured: formData.insured,
-          whatsappAvailable: formData.whatsappAvailable
+          availableOnWeekends: formData.availableOnWeekends || false,
+          emergencyServices: formData.emergencyServices || false,
+          ownTools: formData.ownTools || false,
+          vehicleAvailable: formData.vehicleAvailable || false,
+          certified: formData.certified || false,
+          insured: formData.insured || false,
+          whatsappAvailable: formData.whatsappAvailable || false
         }
       };
 
@@ -430,80 +435,102 @@ const WorkerRegistrationFlow = () => {
         serviceLocations: workerData.serviceLocations
       }, null, 2));
 
-      // Set authorization header with Firebase ID token
-      const config = {
+      // ✅ CRITICAL FIX: Use fresh token in authorization header
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const endpoint = `${apiUrl}/auth/signup`;
+
+      console.log('🌐 Making API request to:', endpoint);
+      console.log('📤 Sending worker registration data...');
+
+      // Make API call with fresh token
+      const response = await fetch(endpoint, {
+        method: 'POST',
         headers: {
-          'Authorization': `Bearer ${tempUserData.idToken}`,
+          'Authorization': `Bearer ${freshToken}`, // ✅ Use fresh token
           'Content-Type': 'application/json'
-        }
-      };
+        },
+        body: JSON.stringify(workerData)
+      });
 
-      console.log('🌐 Making API request to:', `${import.meta.env.VITE_API_URL}/auth/signup`);
+      const data = await response.json();
 
-      // Make API call
-      const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}/auth/signup`,
-        workerData,
-        config
-      );
+      console.log('📥 Registration response:', {
+        status: response.status,
+        success: data.success,
+        message: data.message
+      });
 
-      console.log('✅ Registration successful:', response.data);
+      if (!response.ok) {
+        throw new Error(data.message || `Registration failed: ${response.status}`);
+      }
 
-      if (response.data.success) {
+      console.log('✅ Worker registration successful!');
+      console.log('User ID:', data.data?.user?.id);
+      console.log('Worker ID:', data.data?.worker?.id);
+
+      if (data.success) {
         setRegistrationSuccess(true);
 
-        // Clear session storage
+        // ✅ CRITICAL FIX: Save to BOTH sessionStorage AND localStorage with correct keys
+        const userDataToSave = {
+          id: data.data?.user?.id,
+          email: data.data?.user?.email,
+          fullName: data.data?.user?.fullName,
+          role: 'worker', // ✅ Ensure this is 'worker'
+          firebaseUid: data.data?.user?.firebaseUid,
+          workerId: data.data?.worker?.id
+        };
+
+        // Save to storage
+        sessionStorage.setItem('authToken', freshToken);
+        localStorage.setItem('authToken', freshToken);
+        sessionStorage.setItem('user', JSON.stringify(userDataToSave));
+        localStorage.setItem('user', JSON.stringify(userDataToSave));
+
+        console.log('💾 User data saved to storage');
+        console.log('Token key: authToken ✅');
+        console.log('User role:', userDataToSave.role, '✅');
+
+        // Clear temp data
         sessionStorage.removeItem('tempUserData');
         sessionStorage.removeItem('userEmail');
         sessionStorage.removeItem('pendingRegistration');
 
-        // Store user data in localStorage
-        if (response.data.data) {
-          localStorage.setItem('user', JSON.stringify(response.data.data.user));
-          if (response.data.data.token) {
-            localStorage.setItem('token', response.data.data.token);
-          }
-        }
+        console.log('🎯 Navigating to worker dashboard...');
 
-        // Redirect to worker dashboard after 2 seconds
+        // ✅ FIX 1: Trigger storage event
+        window.dispatchEvent(new Event('storage'));
+
+        // ✅ FIX 2: Use window.location for full page reload
         setTimeout(() => {
-          navigate('/worker/dashboard');
-        }, 2000);
+          console.log('🔄 Force navigating with page reload...');
+          window.location.href = '/worker/dashboard';
+        }, 1000);
       }
 
     } catch (error) {
       console.error('❌ Worker registration error:', error);
 
-      let errorMessage = 'Registration failed. Please try again.';
+      let errorMessage = 'Registration failed. ';
 
-      if (error.response) {
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-
-        // Extract detailed error message
-        if (error.response.data?.message) {
-          errorMessage = error.response.data.message;
-        } else if (error.response.data?.error) {
-          errorMessage = error.response.data.error;
-        }
-
-        // Handle specific validation errors
-        if (error.response.data?.details) {
-          console.error('Validation errors:', error.response.data.details);
-          const validationErrors = error.response.data.details;
-
-          // Show first validation error
-          if (validationErrors.errors && Object.keys(validationErrors.errors).length > 0) {
-            const firstError = Object.values(validationErrors.errors)[0];
-            errorMessage = firstError.message || errorMessage;
-          }
-        }
-      } else if (error.request) {
-        console.error('No response received:', error.request);
-        errorMessage = 'No response from server. Please check your connection.';
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Cannot connect to server. Please check if backend is running on port 5001.';
+      } else if (error.message.includes('already exists') || error.message.includes('already registered')) {
+        errorMessage = 'This account is already registered. Please login instead.';
+      } else if (error.message.includes('token')) {
+        errorMessage = 'Authentication token expired. Please sign up again.';
+        // Redirect to signup if token issue
+        setTimeout(() => {
+          sessionStorage.removeItem('tempUserData');
+          navigate('/signup');
+        }, 3000);
+      } else if (error.response?.data?.details) {
+        // Validation errors from backend
+        console.error('Validation errors:', error.response.data.details);
+        errorMessage = 'Please check all required fields: ' +
+          Object.keys(error.response.data.details.errors || {}).join(', ');
       } else {
-        console.error('Error message:', error.message);
-        errorMessage = error.message;
+        errorMessage += error.message;
       }
 
       setRegistrationError(errorMessage);
@@ -600,8 +627,8 @@ const WorkerRegistrationFlow = () => {
                         setErrors({ ...errors, serviceType: '' });
                       }}
                       className={`p-6 border-2 rounded-lg text-left transition-all ${formData.serviceType === category.id
-                          ? 'border-indigo-600 bg-indigo-50'
-                          : 'border-gray-200 hover:border-indigo-300'
+                        ? 'border-indigo-600 bg-indigo-50'
+                        : 'border-gray-200 hover:border-indigo-300'
                         }`}
                     >
                       <Icon className="h-8 w-8 text-indigo-600 mb-3" />
