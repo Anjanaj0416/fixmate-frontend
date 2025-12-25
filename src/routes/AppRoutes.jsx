@@ -38,6 +38,7 @@ import Settings from '../pages/admin/Settings';
 import QuoteRequestFlow from '../pages/QuoteRequestFlow';
 import WorkerSelectionPage from '../pages/WorkerSelectionPage';
 import ServiceSelectionPage from '../pages/ServiceSelectionPage';
+import CustomerChatPage from '../pages/CustomerChatPage';
 
 /**
  * App Routes Component
@@ -79,6 +80,7 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
+      
 
       <Route
         path="/customer/quote-request"
@@ -129,6 +131,16 @@ const AppRoutes = () => {
           <PrivateRoute>
             <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
               <MyBookings />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/customer/chat/:workerId"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
+              <CustomerChatPage />
             </RoleBasedRoute>
           </PrivateRoute>
         }
