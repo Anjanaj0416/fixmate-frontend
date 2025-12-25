@@ -11,7 +11,7 @@ import apiService from '../services/apiService';
 const CustomerChatPage = () => {
   const { workerId } = useParams();
   const navigate = useNavigate();
-  
+
   const [worker, setWorker] = useState(null);
   const [workerUser, setWorkerUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -25,12 +25,25 @@ const CustomerChatPage = () => {
 
   const loadCurrentUser = () => {
     try {
-      const userStr = sessionStorage.getItem('user');
+      // Try sessionStorage first
+      let userStr = sessionStorage.getItem('user');
+
+      // If not in sessionStorage, try localStorage
+      if (!userStr) {
+        userStr = localStorage.getItem('user');
+      }
+
       if (userStr) {
-        setCurrentUser(JSON.parse(userStr));
+        const user = JSON.parse(userStr);
+        console.log('✅ Current user loaded:', user);
+        setCurrentUser(user);
+      } else {
+        console.error('❌ No user found in storage');
+        setError('User session not found');
       }
     } catch (error) {
-      console.error('Error loading current user:', error);
+      console.error('❌ Error loading current user:', error);
+      setError('Failed to load user session');
     }
   };
 
@@ -43,7 +56,7 @@ const CustomerChatPage = () => {
 
       // Fetch worker profile
       const response = await apiService.get(`/workers/${workerId}/profile`);
-      
+
       let workerData = null;
       if (response.data?.data?.worker) {
         workerData = response.data.data.worker;
@@ -139,7 +152,7 @@ const CustomerChatPage = () => {
             >
               <ArrowLeft size={20} />
             </button>
-            
+
             {/* Worker Info */}
             <div className="flex items-center gap-3">
               {workerUser.profileImage ? (
@@ -153,7 +166,7 @@ const CustomerChatPage = () => {
                   {workerUser.name?.charAt(0).toUpperCase() || 'W'}
                 </div>
               )}
-              
+
               <div>
                 <h3 className="font-semibold text-gray-900">{workerUser.name}</h3>
                 <p className="text-xs text-gray-500">
