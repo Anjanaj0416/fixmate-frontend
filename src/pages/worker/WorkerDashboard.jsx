@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle } from 'lucide-react';
 
 /**
- * Worker Dashboard Component - UPDATED
- * Now with clickable Pending Requests card and navigation to /worker/requests
+ * Worker Dashboard Component - FIXED VERSION
+ * ✅ Active Jobs card is now clickable
+ * ✅ View All Jobs button works correctly
+ * ✅ All navigation paths maintained
  */
 const WorkerDashboard = () => {
   const navigate = useNavigate();
@@ -106,8 +108,12 @@ const WorkerDashboard = () => {
   const handleSignOut = async () => {
     if (window.confirm('Are you sure you want to sign out?')) {
       try {
-        localStorage.removeItem('fixmate_user');
+        // Clear all auth data
         localStorage.removeItem('fixmate_auth_token');
+        localStorage.removeItem('fixmate_user');
+        sessionStorage.clear();
+        
+        // Navigate to login
         navigate('/login');
       } catch (error) {
         console.error('Error signing out:', error);
@@ -117,9 +123,9 @@ const WorkerDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex justify-center items-center h-screen bg-gray-50">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
@@ -127,17 +133,22 @@ const WorkerDashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-8">
       {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+      <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-900">Worker Dashboard</h1>
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Welcome back!</h1>
+              <p className="text-indigo-100">
+                Here's what's happening with your business today
+              </p>
+            </div>
             <button
               onClick={handleSignOut}
-              className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
             >
-              <LogOut className="w-4 h-4" />
+              <LogOut className="w-5 h-5" />
               Sign Out
             </button>
           </div>
@@ -145,21 +156,13 @@ const WorkerDashboard = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Welcome Section */}
-        <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 rounded-lg p-6 text-white mb-6">
-          <h2 className="text-3xl font-bold mb-2">Welcome back!</h2>
-          <p className="text-indigo-100">
-            Here's what's happening with your business today
-          </p>
-        </div>
-
         {/* Profile Completion Alert */}
         {profileCompletion < 100 && (
-          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+          <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-lg">
             <div className="flex items-center justify-between">
-              <div className="flex items-center flex-1">
-                <AlertCircle className="w-6 h-6 text-yellow-400 mr-3 flex-shrink-0" />
-                <div className="flex-1">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-6 h-6 text-yellow-600" />
+                <div>
                   <p className="text-sm font-medium text-yellow-800">
                     Complete your profile to get more bookings!
                   </p>
@@ -186,9 +189,9 @@ const WorkerDashboard = () => {
           </div>
         )}
 
-        {/* Stats Grid */}
+        {/* Stats Grid - ✅ FIXED: Active Jobs now clickable */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Pending Requests - ✅ NOW CLICKABLE */}
+          {/* Pending Requests - ✅ Clickable */}
           <div 
             onClick={() => navigate('/worker/requests')}
             className="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200"
@@ -211,14 +214,22 @@ const WorkerDashboard = () => {
             </div>
           </div>
 
-          {/* Active Jobs */}
-          <div className="bg-white rounded-lg shadow p-6">
+          {/* Active Jobs - ✅ NOW CLICKABLE - navigates to /worker/jobs with active filter */}
+          <div 
+            onClick={() => navigate('/worker/jobs?filter=active')}
+            className="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Active Jobs</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
                   {dashboardData.stats.activeJobs}
                 </p>
+                {dashboardData.stats.activeJobs > 0 && (
+                  <p className="text-sm text-blue-600 font-medium mt-2 hover:underline">
+                    View Jobs →
+                  </p>
+                )}
               </div>
               <div className="bg-blue-100 rounded-full p-3">
                 <Calendar className="w-6 h-6 text-blue-600" />
@@ -257,7 +268,7 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Booking Requests - ✅ NOW CLICKABLE */}
+        {/* Recent Booking Requests - ✅ Clickable */}
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Recent Booking Requests</h3>
@@ -280,7 +291,8 @@ const WorkerDashboard = () => {
                         </p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        booking.status === 'pending' || booking.status === 'quote_requested' ? 'bg-yellow-100 text-yellow-800' :
+                        booking.status === 'pending' || booking.status === 'quote_requested' ? 
+                        'bg-yellow-100 text-yellow-800' :
                         booking.status === 'accepted' ? 'bg-green-100 text-green-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
@@ -298,7 +310,7 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Quick Actions - ✅ ADDED "View Requests" */}
+        {/* Quick Actions - ✅ View All Jobs button works */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
