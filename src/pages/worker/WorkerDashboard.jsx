@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle } from 'lucide-react';
 
 /**
- * Worker Dashboard Component - FIXED
- * Calculates profile completion from worker profile data
+ * Worker Dashboard Component - UPDATED
+ * Now with clickable Pending Requests card and navigation to /worker/requests
  */
 const WorkerDashboard = () => {
   const navigate = useNavigate();
@@ -80,7 +80,7 @@ const WorkerDashboard = () => {
         }
       }
 
-      // Try to fetch dashboard stats (may not exist yet)
+      // Try to fetch dashboard stats
       try {
         const dashboardResponse = await fetch(`${API_BASE_URL}/workers/dashboard`, {
           headers: {
@@ -147,7 +147,7 @@ const WorkerDashboard = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Section */}
         <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 rounded-lg p-6 text-white mb-6">
-          <h2 className="text-3xl font-bold mb-2">Welcome back, !</h2>
+          <h2 className="text-3xl font-bold mb-2">Welcome back!</h2>
           <p className="text-indigo-100">
             Here's what's happening with your business today
           </p>
@@ -188,14 +188,22 @@ const WorkerDashboard = () => {
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Pending Requests */}
-          <div className="bg-white rounded-lg shadow p-6">
+          {/* Pending Requests - ✅ NOW CLICKABLE */}
+          <div 
+            onClick={() => navigate('/worker/requests')}
+            className="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Pending Requests</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">
                   {dashboardData.stats.pendingRequests}
                 </p>
+                {dashboardData.stats.pendingRequests > 0 && (
+                  <p className="text-sm text-indigo-600 font-medium mt-2 hover:underline">
+                    View Requests →
+                  </p>
+                )}
               </div>
               <div className="bg-yellow-100 rounded-full p-3">
                 <Briefcase className="w-6 h-6 text-yellow-600" />
@@ -249,7 +257,7 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Booking Requests */}
+        {/* Recent Booking Requests - ✅ NOW CLICKABLE */}
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Recent Booking Requests</h3>
@@ -258,21 +266,25 @@ const WorkerDashboard = () => {
             {dashboardData.recentBookings && dashboardData.recentBookings.length > 0 ? (
               <div className="space-y-4">
                 {dashboardData.recentBookings.map((booking) => (
-                  <div key={booking._id} className="border border-gray-200 rounded-lg p-4">
+                  <div 
+                    key={booking._id} 
+                    onClick={() => navigate('/worker/requests')}
+                    className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
+                  >
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="font-medium text-gray-900">{booking.serviceType}</h4>
-                        <p className="text-sm text-gray-600 mt-1">{booking.description}</p>
+                        <h4 className="font-medium text-gray-900 capitalize">{booking.serviceType}</h4>
+                        <p className="text-sm text-gray-600 mt-1">{booking.problemDescription || booking.description || 'No description'}</p>
                         <p className="text-xs text-gray-500 mt-2">
                           {new Date(booking.createdAt).toLocaleDateString()}
                         </p>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        booking.status === 'pending' || booking.status === 'quote_requested' ? 'bg-yellow-100 text-yellow-800' :
                         booking.status === 'accepted' ? 'bg-green-100 text-green-800' :
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {booking.status}
+                        {booking.status.replace('_', ' ')}
                       </span>
                     </div>
                   </div>
@@ -286,13 +298,20 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Quick Actions - ✅ ADDED "View Requests" */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <button
+                onClick={() => navigate('/worker/requests')}
+                className="flex items-center justify-center gap-2 bg-yellow-600 text-white px-4 py-3 rounded-lg hover:bg-yellow-700 transition-colors"
+              >
+                <Briefcase className="w-5 h-5" />
+                View Requests
+              </button>
               <button
                 onClick={() => navigate('/worker/profile')}
                 className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-3 rounded-lg hover:bg-indigo-700 transition-colors"

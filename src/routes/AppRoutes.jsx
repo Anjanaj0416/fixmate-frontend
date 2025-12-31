@@ -40,6 +40,7 @@ import WorkerSelectionPage from '../pages/WorkerSelectionPage';
 import ServiceSelectionPage from '../pages/ServiceSelectionPage';
 import CustomerChatPage from '../pages/CustomerChatPage';
 import WorkerEditProfile from '../pages/worker/WorkerEditProfile';
+import WorkerBookingRequests from '../pages/worker/WorkerBookingRequests';
 
 /**
  * App Routes Component
@@ -184,6 +185,16 @@ const AppRoutes = () => {
           <PrivateRoute>
             <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
               <WorkerDashboard />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/worker/requests"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerBookingRequests />
             </RoleBasedRoute>
           </PrivateRoute>
         }
