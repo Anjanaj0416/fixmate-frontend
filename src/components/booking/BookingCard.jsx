@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import {
   Calendar,
@@ -10,10 +10,26 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  ArrowRight
+  ArrowRight,
+  Check
 } from 'lucide-react';
 
-const BookingCard = ({ booking, onViewDetails, compact = false }) => {
+/**
+ * BookingCard Component - ENHANCED WITH COMPLETE BUTTON
+ * ✅ Fixed: Proper null/undefined checks for all properties
+ * ✅ Added: Worker view support
+ * ✅ Enhanced: Better handling of missing data
+ * ✅ NEW: Complete button for active bookings
+ */
+const BookingCard = ({ booking, onViewDetails, onCompleteBooking, compact = false, workerView = false }) => {
+  const [isCompleting, setIsCompleting] = useState(false);
+
+  // ✅ Safety check: Return null if booking is invalid
+  if (!booking || typeof booking !== 'object') {
+    console.warn('⚠️ BookingCard received invalid booking:', booking);
+    return null;
+  }
+
   const getStatusConfig = (status) => {
     const configs = {
       pending: {
@@ -23,6 +39,13 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
         icon: Clock,
         label: 'Pending'
       },
+      quote_requested: {
+        bg: 'bg-yellow-50',
+        border: 'border-yellow-200',
+        text: 'text-yellow-800',
+        icon: Clock,
+        label: 'Quote Requested'
+      },
       accepted: {
         bg: 'bg-blue-50',
         border: 'border-blue-200',
@@ -31,6 +54,13 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
         label: 'Accepted'
       },
       in_progress: {
+        bg: 'bg-purple-50',
+        border: 'border-purple-200',
+        text: 'text-purple-800',
+        icon: Briefcase,
+        label: 'In Progress'
+      },
+      'in-progress': {
         bg: 'bg-purple-50',
         border: 'border-purple-200',
         text: 'text-purple-800',
@@ -66,20 +96,82 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
   const StatusIcon = statusConfig.icon;
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
+    if (!dateString) return 'Date not set';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid date';
+      return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      });
+    } catch (error) {
+      return 'Invalid date';
+    }
   };
 
   const formatTime = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    if (!dateString) return 'Time not set';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid time';
+      return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid time';
+    }
+  };
+
+  // ✅ Safe getter for customer/worker name
+  const getPersonName = () => {
+    if (workerView) {
+      // For worker view, show customer info
+      return booking.customerId?.fullName || 
+             booking.customerId?.name || 
+             booking.customerName ||
+             'Customer';
+    } else {
+      // For customer view, show worker info
+      return booking.workerId?.fullName || 
+             booking.workerId?.name || 
+             booking.workerName ||
+             'Worker';
+    }
+  };
+
+  const getPersonRole = () => {
+    return workerView ? 'Customer' : 'Worker';
+  };
+
+  // ✅ Check if booking is active (accepted or in_progress)
+  const isActiveBooking = () => {
+    const status = booking.status?.toLowerCase();
+    return status === 'accepted' || 
+           status === 'in_progress' || 
+           status === 'in-progress' ||
+           status === 'inprogress';
+  };
+
+  // Handle complete booking
+  const handleCompleteBooking = async () => {
+    if (!onCompleteBooking) {
+      console.warn('No onCompleteBooking handler provided');
+      return;
+    }
+
+    if (window.confirm('Mark this job as completed?')) {
+      setIsCompleting(true);
+      try {
+        await onCompleteBooking(booking._id);
+      } catch (error) {
+        console.error('Error completing booking:', error);
+        alert('Failed to complete booking. Please try again.');
+      } finally {
+        setIsCompleting(false);
+      }
+    }
   };
 
   if (compact) {
@@ -94,11 +186,11 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
               <Briefcase className={`w-5 h-5 ${statusConfig.text}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <h4 className="font-semibold text-gray-900 truncate">
-                {booking.serviceType}
+              <h4 className="font-semibold text-gray-900 truncate capitalize">
+                {booking.serviceType || 'Service Request'}
               </h4>
               <p className="text-sm text-gray-500 truncate">
-                {formatDate(booking.scheduledDate)}
+                {booking.scheduledDate ? formatDate(booking.scheduledDate) : formatDate(booking.createdAt)}
               </p>
             </div>
           </div>
@@ -124,7 +216,7 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
             </span>
           </div>
           <span className="text-sm text-gray-600">
-            Booking ID: {booking._id?.slice(-8)}
+            ID: {booking._id ? booking._id.slice(-8) : 'N/A'}
           </span>
         </div>
       </div>
@@ -133,11 +225,11 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
       <div className="p-6">
         {/* Service Type */}
         <div className="mb-4">
-          <h3 className="text-xl font-bold text-gray-900 mb-1">
-            {booking.serviceType}
+          <h3 className="text-xl font-bold text-gray-900 mb-1 capitalize">
+            {booking.serviceType || 'Service Request'}
           </h3>
           <p className="text-gray-600 line-clamp-2">
-            {booking.problemDescription}
+            {booking.problemDescription || booking.description || 'No description provided'}
           </p>
         </div>
 
@@ -150,10 +242,10 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900">
-                {booking.customerId?.name || booking.workerId?.name || 'N/A'}
+                {getPersonName()}
               </p>
               <p className="text-sm text-gray-500">
-                {booking.customerId ? 'Customer' : 'Worker'}
+                {getPersonRole()}
               </p>
             </div>
           </div>
@@ -165,10 +257,10 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
             </div>
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">
-                {formatDate(booking.scheduledDate)}
+                {booking.scheduledDate ? formatDate(booking.scheduledDate) : formatDate(booking.serviceDate || booking.createdAt)}
               </p>
               <p className="text-sm text-gray-500">
-                {formatTime(booking.scheduledDate)}
+                {booking.scheduledDate ? formatTime(booking.scheduledDate) : 'Time not specified'}
               </p>
             </div>
           </div>
@@ -180,26 +272,32 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-gray-900 truncate">
-                {booking.serviceLocation?.address || 'Location not specified'}
+                {booking.serviceLocation?.address || 
+                 booking.issueLocation ||
+                 booking.location?.address ||
+                 'Location not specified'}
               </p>
               <p className="text-sm text-gray-500">
-                {booking.serviceLocation?.city || ''}
+                {booking.serviceLocation?.city || 
+                 booking.serviceLocation?.town ||
+                 booking.location?.city || 
+                 ''}
               </p>
             </div>
           </div>
 
-          {/* Price */}
-          {booking.totalAmount && (
+          {/* Price - Only show if available */}
+          {(booking.totalAmount || booking.quote?.amount || booking.customerBudget) && (
             <div className="flex items-start space-x-3">
               <div className="flex-shrink-0 mt-1">
                 <DollarSign className="w-5 h-5 text-gray-400" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">
-                  Rs {booking.totalAmount.toLocaleString()}
+                  LKR {(booking.totalAmount || booking.quote?.amount || booking.customerBudget?.max || 0).toLocaleString()}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {booking.paymentStatus || 'Pending payment'}
+                  {booking.paymentStatus ? booking.paymentStatus.replace('_', ' ') : 'pending'}
                 </p>
               </div>
             </div>
@@ -211,14 +309,23 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
           <div className="mb-4">
             <p className="text-sm font-medium text-gray-700 mb-2">Problem Images:</p>
             <div className="flex space-x-2 overflow-x-auto">
-              {booking.problemImages.slice(0, 3).map((image, index) => (
-                <img
-                  key={index}
-                  src={image.url}
-                  alt={`Problem ${index + 1}`}
-                  className="w-20 h-20 object-cover rounded-md border border-gray-200"
-                />
-              ))}
+              {booking.problemImages.slice(0, 3).map((image, index) => {
+                // Handle both URL strings and objects with url property
+                const imageUrl = typeof image === 'string' ? image : image?.url;
+                if (!imageUrl) return null;
+                
+                return (
+                  <img
+                    key={index}
+                    src={imageUrl}
+                    alt={`Problem ${index + 1}`}
+                    className="w-20 h-20 object-cover rounded-md border border-gray-200"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                );
+              })}
               {booking.problemImages.length > 3 && (
                 <div className="w-20 h-20 bg-gray-100 rounded-md border border-gray-200 flex items-center justify-center">
                   <span className="text-sm text-gray-600 font-medium">
@@ -231,14 +338,17 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
         )}
 
         {/* Quote Info */}
-        {booking.quote && (
+        {booking.quote && booking.quote.amount && (
           <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-md">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-indigo-900">Quote Provided</p>
                 <p className="text-lg font-bold text-indigo-700">
-                  Rs {booking.quote.totalAmount.toLocaleString()}
+                  LKR {booking.quote.amount.toLocaleString()}
                 </p>
+                {booking.quote.details && (
+                  <p className="text-sm text-indigo-600 mt-1">{booking.quote.details}</p>
+                )}
               </div>
               {booking.quote.status === 'accepted' && (
                 <CheckCircle className="w-6 h-6 text-green-600" />
@@ -253,7 +363,7 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
             <p className="text-sm font-medium text-gray-700 mb-2">Latest Update:</p>
             <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
               <p className="text-sm text-gray-900">
-                {booking.workProgress[booking.workProgress.length - 1].note}
+                {booking.workProgress[booking.workProgress.length - 1].note || 'Update recorded'}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 {formatDate(booking.workProgress[booking.workProgress.length - 1].timestamp)}
@@ -263,28 +373,57 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
         )}
 
         {/* Actions */}
-        <div className="flex space-x-3 pt-4 border-t border-gray-200">
-          <button
-            onClick={() => onViewDetails && onViewDetails(booking)}
-            className="flex-1 flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
-          >
-            <span className="mr-2">View Details</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-          
-          {booking.status === 'pending' && (
-            <>
-              <button
-                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-              >
-                Accept
-              </button>
-              <button
-                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-              >
-                Decline
-              </button>
-            </>
+        <div className="flex flex-col space-y-3 pt-4 border-t border-gray-200">
+          {/* Primary Action Buttons */}
+          <div className="flex space-x-3">
+            <button
+              onClick={() => onViewDetails && onViewDetails(booking)}
+              className="flex-1 flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+            >
+              <span className="mr-2">View Details</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+            
+            {/* Show Accept/Decline for pending bookings in worker view */}
+            {booking.status === 'pending' && workerView && (
+              <>
+                <button
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Accept
+                </button>
+                <button
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                >
+                  Decline
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* ✅ NEW: Complete Button for Active Bookings in Worker View */}
+          {workerView && isActiveBooking() && (
+            <button
+              onClick={handleCompleteBooking}
+              disabled={isCompleting}
+              className={`w-full flex items-center justify-center px-4 py-3 rounded-md font-semibold transition-colors ${
+                isCompleting
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              }`}
+            >
+              {isCompleting ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  Completing...
+                </>
+              ) : (
+                <>
+                  <Check className="w-5 h-5 mr-2" />
+                  Mark as Completed
+                </>
+              )}
+            </button>
           )}
         </div>
       </div>
@@ -304,27 +443,50 @@ const BookingCard = ({ booking, onViewDetails, compact = false }) => {
 
 BookingCard.propTypes = {
   booking: PropTypes.shape({
-    _id: PropTypes.string.isRequired,
-    serviceType: PropTypes.string.isRequired,
-    status: PropTypes.string.isRequired,
+    _id: PropTypes.string,
+    serviceType: PropTypes.string,
+    status: PropTypes.string,
     problemDescription: PropTypes.string,
-    scheduledDate: PropTypes.string.isRequired,
-    customerId: PropTypes.object,
-    workerId: PropTypes.object,
+    description: PropTypes.string,
+    scheduledDate: PropTypes.string,
+    serviceDate: PropTypes.string,
+    customerId: PropTypes.oneOfType([
+      PropTypes.object,
+      PropTypes.string
+    ]),
+    workerId: PropTypes.oneOfType([
+      PropTypes.object,
+      PropTypes.string
+    ]),
+    customerName: PropTypes.string,
+    workerName: PropTypes.string,
     serviceLocation: PropTypes.shape({
       address: PropTypes.string,
-      city: PropTypes.string
+      city: PropTypes.string,
+      town: PropTypes.string
     }),
+    location: PropTypes.object,
+    issueLocation: PropTypes.string,
     totalAmount: PropTypes.number,
     paymentStatus: PropTypes.string,
     problemImages: PropTypes.array,
-    quote: PropTypes.object,
+    quote: PropTypes.shape({
+      amount: PropTypes.number,
+      details: PropTypes.string,
+      status: PropTypes.string
+    }),
+    customerBudget: PropTypes.shape({
+      min: PropTypes.number,
+      max: PropTypes.number
+    }),
     workProgress: PropTypes.array,
     createdAt: PropTypes.string,
     updatedAt: PropTypes.string
   }).isRequired,
   onViewDetails: PropTypes.func,
-  compact: PropTypes.bool
+  onCompleteBooking: PropTypes.func,
+  compact: PropTypes.bool,
+  workerView: PropTypes.bool
 };
 
 export default BookingCard;

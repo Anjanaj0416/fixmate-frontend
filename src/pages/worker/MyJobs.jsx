@@ -7,10 +7,10 @@ import Spinner from '../../components/common/Spinner';
 import BookingCard from '../../components/booking/BookingCard';
 
 /**
- * My Jobs Component - IMPROVED VERSION
- * ✅ Tries multiple API endpoints
- * ✅ Better error handling
- * ✅ Fallback strategies
+ * My Jobs Component - WITH COMPLETE BOOKING FUNCTIONALITY
+ * ✅ Fixed: Active filter now fetches all bookings and filters client-side
+ * ✅ Added: Complete booking handler
+ * ✅ Maintains existing interface and functionality
  */
 const MyJobs = () => {
   const navigate = useNavigate();
@@ -47,21 +47,23 @@ const MyJobs = () => {
         role: 'worker'
       });
       
-      if (filter !== 'all') {
+      // ✅ FIX: Don't send 'active' status to backend
+      if (filter !== 'all' && filter !== 'active') {
         params.append('status', filter);
       }
       
+      console.log('📡 API Request params:', params.toString());
+      
       // ✅ Try multiple endpoint strategies
       const endpoints = [
-        `/bookings/my?${params}`,           // Strategy 1: /my endpoint
-        `/bookings?${params}`,              // Strategy 2: root endpoint with params
-        `/bookings/worker?${params}`,       // Strategy 3: /worker endpoint
+        `/bookings/my?${params}`,
+        `/bookings?${params}`,
+        `/bookings/worker?${params}`,
       ];
       
       let response = null;
       let lastError = null;
       
-      // Try each endpoint until one works
       for (const endpoint of endpoints) {
         try {
           console.log(`🔄 Trying endpoint: ${endpoint}`);
@@ -77,18 +79,17 @@ const MyJobs = () => {
 
           if (response.ok) {
             console.log(`✅ Success with endpoint: ${endpoint}`);
-            break; // Found a working endpoint
+            break;
           } else {
             lastError = `${endpoint}: HTTP ${response.status}`;
           }
         } catch (fetchError) {
           console.log(`❌ Endpoint failed: ${endpoint}`, fetchError.message);
           lastError = fetchError.message;
-          continue; // Try next endpoint
+          continue;
         }
       }
       
-      // If no endpoint worked
       if (!response || !response.ok) {
         throw new Error(lastError || 'All API endpoints failed');
       }
@@ -96,11 +97,9 @@ const MyJobs = () => {
       const data = await response.json();
       console.log('✅ Bookings response:', data);
       
-      // ✅ Safely extract bookings array with multiple fallback strategies
       let bookingsArray = [];
       
       if (data.success && data.data) {
-        // Try different response structures
         if (Array.isArray(data.data.bookings)) {
           bookingsArray = data.data.bookings;
         } else if (Array.isArray(data.data)) {
@@ -117,10 +116,60 @@ const MyJobs = () => {
       
     } catch (error) {
       console.error('❌ Error fetching bookings:', error);
-      setError(error.message || 'Failed to load bookings. Please check if the backend is running.');
+      setError(error.message || 'Failed to load bookings.');
       setBookings([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ✅ NEW: Handle completing a booking
+  const handleCompleteBooking = async (bookingId) => {
+    try {
+      const token = localStorage.getItem('fixmate_auth_token');
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
+      console.log('🎯 Completing booking:', bookingId);
+
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: 'completed'
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to complete booking');
+      }
+
+      const data = await response.json();
+      console.log('✅ Booking completed successfully:', data);
+
+      // Show success message
+      alert('Job marked as completed successfully! 🎉');
+
+      // Refresh bookings list
+      await fetchBookings();
+
+      // If we're on active filter and no more active jobs, show completed instead
+      const remainingActive = bookings.filter(b => 
+        b._id !== bookingId && 
+        ['accepted', 'in_progress', 'in-progress'].includes(b.status?.toLowerCase())
+      );
+
+      if (filter === 'active' && remainingActive.length === 0) {
+        setFilter('completed');
+        setSearchParams({ filter: 'completed' });
+      }
+
+    } catch (error) {
+      console.error('❌ Error completing booking:', error);
+      throw error; // Re-throw to let BookingCard handle the error display
     }
   };
 
@@ -135,13 +184,37 @@ const MyJobs = () => {
       return [];
     }
     
-    if (filter === 'all') return bookings;
+    console.log(`🔍 Filtering ${bookings.length} bookings with filter: ${filter}`);
     
-    if (filter === 'active') {
-      return bookings.filter(b => ['accepted', 'in_progress'].includes(b?.status));
+    if (filter === 'all') {
+      console.log('✅ Returning all bookings:', bookings.length);
+      return bookings;
     }
     
-    return bookings.filter(b => b?.status === filter);
+    // ✅ Handle 'active' filter
+    if (filter === 'active') {
+      const activeBookings = bookings.filter(b => {
+        const status = b?.status?.toLowerCase();
+        return status === 'accepted' || 
+               status === 'in_progress' || 
+               status === 'in-progress' ||
+               status === 'inprogress';
+      });
+      console.log('✅ Active bookings found:', activeBookings.length);
+      return activeBookings;
+    }
+    
+    // For other filters, match the exact status
+    const filtered = bookings.filter(b => {
+      const status = b?.status?.toLowerCase();
+      const filterLower = filter.toLowerCase();
+      return status === filterLower || 
+             status === filterLower.replace('_', '-') ||
+             status === filterLower.replace('-', '_');
+    });
+    
+    console.log(`✅ Filtered bookings (${filter}):`, filtered.length);
+    return filtered;
   };
 
   const filteredBookings = getFilteredBookings();
@@ -184,9 +257,6 @@ const MyJobs = () => {
               <div className="flex-1">
                 <h3 className="text-sm font-semibold text-red-800">Error Loading Jobs</h3>
                 <p className="text-sm text-red-600 mt-1">{error}</p>
-                <p className="text-xs text-red-500 mt-2">
-                  Make sure your backend server is running on port 5001
-                </p>
               </div>
               <button
                 onClick={fetchBookings}
@@ -257,6 +327,12 @@ const MyJobs = () => {
                 key={booking._id || booking.id}
                 booking={booking}
                 workerView={true}
+                onCompleteBooking={handleCompleteBooking}
+                onViewDetails={(booking) => {
+                  console.log('View details for booking:', booking._id);
+                  // Navigate to booking details page when implemented
+                  // navigate(`/worker/bookings/${booking._id}`);
+                }}
               />
             ))}
           </div>
