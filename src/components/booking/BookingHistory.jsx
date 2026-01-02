@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Search,
@@ -9,17 +10,15 @@ import {
   AlertCircle
 } from 'lucide-react';
 import BookingCard from './BookingCard';
-import BookingDetails from './BookingDetails';
 
 const BookingHistory = ({ userId, userRole }) => {
+  const navigate = useNavigate();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
-  const [selectedBookingId, setSelectedBookingId] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -56,9 +55,9 @@ const BookingHistory = ({ userId, userRole }) => {
     }
   };
 
+  // ✅ FIXED: Navigate to the full page instead of showing modal
   const handleViewDetails = (booking) => {
-    setSelectedBookingId(booking._id);
-    setShowDetails(true);
+    navigate(`/customer/bookings/${booking._id}`);
   };
 
   const handleExportBookings = () => {
@@ -256,21 +255,7 @@ const BookingHistory = ({ userId, userRole }) => {
         </div>
       )}
 
-      {/* Booking Details Modal */}
-      {showDetails && selectedBookingId && (
-        <BookingDetails
-          bookingId={selectedBookingId}
-          onClose={() => {
-            setShowDetails(false);
-            setSelectedBookingId(null);
-          }}
-          onStatusUpdate={(bookingId, status) => {
-            // Handle status update
-            console.log('Update booking status:', bookingId, status);
-            fetchBookings();
-          }}
-        />
-      )}
+      {/* ✅ REMOVED: Modal version of BookingDetails */}
     </div>
   );
 };
