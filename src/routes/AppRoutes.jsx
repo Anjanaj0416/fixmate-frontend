@@ -41,7 +41,7 @@ import ServiceSelectionPage from '../pages/ServiceSelectionPage';
 import CustomerChatPage from '../pages/CustomerChatPage';
 import WorkerEditProfile from '../pages/worker/WorkerEditProfile';
 import WorkerBookingRequests from '../pages/worker/WorkerBookingRequests';
-import CustomerBookingDetails from '../pages/customer/CustomerBookingDetails';
+
 
 /**
  * App Routes Component
@@ -138,16 +138,7 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
-      <Route
-        path="/customer/bookings/:id"
-        element={
-          <PrivateRoute>
-            <RoleBasedRoute allowedRoles={[USER_ROLES.CUSTOMER]}>
-              <CustomerBookingDetails />
-            </RoleBasedRoute>
-          </PrivateRoute>
-        }
-      />
+      
       <Route
         path="/worker/edit-profile"
         element={

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { 
-  Wrench, 
-  Users, 
-  Star, 
-  Shield, 
+import {
+  Wrench,
+  Users,
+  Star,
+  Shield,
   ArrowRight,
   CheckCircle,
   Zap,
@@ -23,18 +23,7 @@ const Home = () => {
     cities: 15
   });
 
-  useEffect(() => {
-    // Redirect if already logged in
-    if (user) {
-      if (user.role === 'customer') {
-        navigate('/customer/dashboard');
-      } else if (user.role === 'worker') {
-        navigate('/worker/dashboard');
-      } else if (user.role === 'admin') {
-        navigate('/admin/panel');
-      }
-    }
-  }, [user, navigate]);
+
 
   const services = [
     { icon: '🔧', name: 'Plumbing', description: 'Professional plumbers for all your needs' },
@@ -93,6 +82,30 @@ const Home = () => {
     }
   ];
 
+  const handleGetStarted = () => {
+    if (user) {
+      // If user is logged in, take them to their dashboard
+      if (user.role === 'customer') {
+        navigate('/customer/dashboard');
+      } else if (user.role === 'worker') {
+        navigate('/worker/dashboard');
+      } else if (user.role === 'admin') {
+        navigate('/admin/panel');
+      }
+    } else {
+      // If not logged in, take them to signup
+      navigate('/signup');
+    }
+  };
+
+  const handleFindWorkers = () => {
+    if (user && user.role === 'customer') {
+      navigate('/customer/find-workers');
+    } else {
+      navigate('/signup');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
@@ -103,7 +116,7 @@ const Home = () => {
           <div className="absolute top-40 right-10 w-72 h-72 bg-indigo-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-2000"></div>
           <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-blob animation-delay-4000"></div>
         </div>
-        
+
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -111,17 +124,17 @@ const Home = () => {
                 <Zap className="w-4 h-4 mr-2" />
                 <span className="text-sm font-medium">AI-Powered Platform</span>
               </div>
-              
+
               <h1 className="text-5xl sm:text-6xl font-bold mb-6 leading-tight">
                 Find Skilled Workers in
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-pink-300"> Sri Lanka</span>
               </h1>
-              
+
               <p className="text-xl text-indigo-100 mb-8 leading-relaxed">
-                Connect with verified professionals for all your home service needs. 
+                Connect with verified professionals for all your home service needs.
                 From plumbing to electrical work, we've got you covered.
               </p>
-              
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <Button
                   onClick={() => navigate('/login')}
@@ -152,8 +165,8 @@ const Home = () => {
               <div className="relative">
                 <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-3xl transform rotate-6"></div>
                 <div className="relative bg-white rounded-3xl shadow-2xl p-8">
-                  <img 
-                    src="/assets/images/hero-illustration.svg" 
+                  <img
+                    src="/assets/images/hero-illustration.svg"
                     alt="Worker illustration"
                     className="w-full h-auto"
                   />
