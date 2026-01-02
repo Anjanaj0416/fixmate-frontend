@@ -22,7 +22,7 @@ import Spinner from '../../components/common/Spinner';
 
 /**
  * Booking Details Page - Customer View
- * Displays comprehensive booking information with messaging capability
+ * FIXED: Removed duplication, message button for all bookings, proper worker ID handling
  */
 const BookingDetails = () => {
   const { bookingId } = useParams();
@@ -99,17 +99,31 @@ const BookingDetails = () => {
       return;
     }
 
-    const workerId = booking.workerId._id || booking.workerId.id || booking.workerId;
+    // ✅ FIXED: Handle both object and string workerId
+    let workerId;
+    if (typeof booking.workerId === 'object') {
+      workerId = booking.workerId._id || booking.workerId.id;
+    } else {
+      workerId = booking.workerId;
+    }
+
+    if (!workerId) {
+      console.error('❌ Could not extract worker ID:', booking.workerId);
+      alert('Unable to open chat. Worker information is incomplete.');
+      return;
+    }
+
     console.log('💬 Opening chat with worker:', workerId);
     navigate(`/customer/chat/${workerId}`);
   };
 
   const handleCallWorker = () => {
-    if (!booking?.workerId?.phoneNumber) {
+    const phoneNumber = booking.workerId?.phoneNumber;
+    if (!phoneNumber) {
       alert('Worker phone number not available');
       return;
     }
-    window.location.href = `tel:${booking.workerId.phoneNumber}`;
+    window.location.href = `tel:${phoneNumber}`;
   };
 
   const handleCancelBooking = async () => {
@@ -127,92 +141,38 @@ const BookingDetails = () => {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          reason: 'Customer requested cancellation'
-        })
+        }
       });
 
       if (!response.ok) {
         throw new Error('Failed to cancel booking');
       }
 
-      alert('Booking cancelled successfully');
-      fetchBookingDetails();
+      const data = await response.json();
+      if (data.success) {
+        alert('Booking cancelled successfully');
+        fetchBookingDetails(); // Refresh booking data
+      }
     } catch (error) {
-      console.error('❌ Error cancelling booking:', error);
-      alert('Failed to cancel booking: ' + error.message);
+      console.error('Error cancelling booking:', error);
+      alert('Failed to cancel booking. Please try again.');
     } finally {
       setActionLoading(false);
     }
   };
 
-  const getStatusConfig = (status) => {
-    const configs = {
-      quote_requested: {
-        icon: Clock,
-        label: 'Quote Requested',
-        color: 'text-yellow-600',
-        bgColor: 'bg-yellow-50',
-        borderColor: 'border-yellow-200'
-      },
-      pending: {
-        icon: Clock,
-        label: 'Pending',
-        color: 'text-orange-600',
-        bgColor: 'bg-orange-50',
-        borderColor: 'border-orange-200'
-      },
-      accepted: {
-        icon: CheckCircle,
-        label: 'Accepted',
-        color: 'text-green-600',
-        bgColor: 'bg-green-50',
-        borderColor: 'border-green-200'
-      },
-      in_progress: {
-        icon: Loader2,
-        label: 'In Progress',
-        color: 'text-blue-600',
-        bgColor: 'bg-blue-50',
-        borderColor: 'border-blue-200'
-      },
-      completed: {
-        icon: CheckCircle,
-        label: 'Completed',
-        color: 'text-green-600',
-        bgColor: 'bg-green-50',
-        borderColor: 'border-green-200'
-      },
-      cancelled: {
-        icon: XCircle,
-        label: 'Cancelled',
-        color: 'text-red-600',
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200'
-      },
-      declined: {
-        icon: XCircle,
-        label: 'Declined',
-        color: 'text-red-600',
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200'
-      }
-    };
-    return configs[status] || configs.pending;
-  };
-
+  // Format date helper
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
-      weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
   };
 
+  // Format time helper
   const formatTime = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -222,30 +182,97 @@ const BookingDetails = () => {
     });
   };
 
+  // Get status configuration
+  const getStatusConfig = (status) => {
+    const configs = {
+      quote_requested: {
+        label: 'Quote Requested',
+        color: 'text-yellow-700',
+        bgColor: 'bg-yellow-100',
+        borderColor: 'border-yellow-300',
+        icon: Clock
+      },
+      pending: {
+        label: 'Pending',
+        color: 'text-yellow-700',
+        bgColor: 'bg-yellow-100',
+        borderColor: 'border-yellow-300',
+        icon: Clock
+      },
+      accepted: {
+        label: 'Accepted',
+        color: 'text-blue-700',
+        bgColor: 'bg-blue-100',
+        borderColor: 'border-blue-300',
+        icon: CheckCircle
+      },
+      in_progress: {
+        label: 'In Progress',
+        color: 'text-indigo-700',
+        bgColor: 'bg-indigo-100',
+        borderColor: 'border-indigo-300',
+        icon: Clock
+      },
+      completed: {
+        label: 'Completed',
+        color: 'text-green-700',
+        bgColor: 'bg-green-100',
+        borderColor: 'border-green-300',
+        icon: CheckCircle
+      },
+      cancelled: {
+        label: 'Cancelled',
+        color: 'text-red-700',
+        bgColor: 'bg-red-100',
+        borderColor: 'border-red-300',
+        icon: XCircle
+      },
+      declined: {
+        label: 'Declined',
+        color: 'text-red-700',
+        bgColor: 'bg-red-100',
+        borderColor: 'border-red-300',
+        icon: XCircle
+      }
+    };
+
+    return configs[status] || configs.pending;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="text-center">
-          <Spinner size="lg" />
-          <p className="mt-4 text-gray-600">Loading booking details...</p>
-        </div>
+        <Spinner size="lg" />
       </div>
     );
   }
 
-  if (error || !booking) {
+  if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
-        <div className="max-w-3xl mx-auto">
-          <Card className="p-8 text-center">
-            <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Error Loading Booking</h2>
-            <p className="text-gray-600 mb-6">{error || 'Booking not found'}</p>
-            <Button onClick={handleBack} variant="primary">
-              Back to Bookings
-            </Button>
-          </Card>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <Card className="max-w-md p-6">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Booking</h2>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={handleBack}>Back to My Bookings</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <Card className="max-w-md p-6">
+          <div className="text-center">
+            <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Booking Not Found</h2>
+            <p className="text-gray-600 mb-4">The booking you're looking for doesn't exist.</p>
+            <Button onClick={handleBack}>Back to My Bookings</Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -253,21 +280,28 @@ const BookingDetails = () => {
   const statusConfig = getStatusConfig(booking.status);
   const StatusIcon = statusConfig.icon;
 
+  // ✅ Check if worker information exists
+  const hasWorkerInfo = booking.workerId && (
+    typeof booking.workerId === 'object' 
+      ? (booking.workerId._id || booking.workerId.id)
+      : booking.workerId
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <div className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-4">
               <button
                 onClick={handleBack}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
-                <ArrowLeft size={20} />
+                <ArrowLeft className="w-5 h-5" />
               </button>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Booking Details</h1>
+                <h1 className="text-2xl font-bold text-gray-900">Booking Details</h1>
                 <p className="text-sm text-gray-500">ID: {booking._id?.slice(-8)}</p>
               </div>
             </div>
@@ -355,13 +389,13 @@ const BookingDetails = () => {
           </div>
         </Card>
 
-        {/* Worker Information Card */}
-        {booking.workerId && (
+        {/* ✅ FIXED: Worker Information Card - Shows ONLY ONCE, for ALL bookings with worker */}
+        {hasWorkerInfo && (
           <Card>
             <div className="p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">Worker Information</h2>
               <div className="flex items-center gap-4 mb-4">
-                {booking.workerId.profileImage ? (
+                {booking.workerId?.profileImage ? (
                   <img
                     src={booking.workerId.profileImage}
                     alt={booking.workerId.fullName || 'Worker'}
@@ -374,29 +408,30 @@ const BookingDetails = () => {
                 )}
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">
-                    {booking.workerId.fullName || 'Worker'}
+                    {booking.workerId?.fullName || booking.workerId?.name || 'Worker'}
                   </h3>
-                  {booking.workerId.phoneNumber && (
+                  {booking.workerId?.phoneNumber && (
                     <p className="text-sm text-gray-600">{booking.workerId.phoneNumber}</p>
                   )}
                 </div>
               </div>
+              
+              {/* ✅ FIXED: Action Buttons - Shows for ALL bookings with worker */}
               <div className="flex gap-3">
                 <Button
                   onClick={handleMessageWorker}
-                  variant="primary"
-                  className="flex-1 flex items-center justify-center gap-2"
+                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
                 >
-                  <MessageCircle size={18} />
+                  <MessageCircle className="w-4 h-4" />
                   Message Worker
                 </Button>
-                {booking.workerId.phoneNumber && (
+                {booking.workerId?.phoneNumber && (
                   <Button
                     onClick={handleCallWorker}
                     variant="outline"
-                    className="flex items-center justify-center gap-2 px-6"
+                    className="flex items-center justify-center gap-2"
                   >
-                    <Phone size={18} />
+                    <Phone className="w-4 h-4" />
                     Call
                   </Button>
                 )}
@@ -443,26 +478,16 @@ const BookingDetails = () => {
         {booking.problemImages && booking.problemImages.length > 0 && (
           <Card>
             <div className="p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <ImageIcon className="w-5 h-5" />
-                Problem Images
-              </h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Problem Images</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {booking.problemImages.map((image, index) => (
-                  <div key={index} className="relative group">
+                  <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
                     <img
                       src={image}
                       alt={`Problem ${index + 1}`}
-                      className="w-full h-40 object-cover rounded-lg border border-gray-200"
-                    />
-                    <button
+                      className="w-full h-full object-cover hover:scale-105 transition-transform cursor-pointer"
                       onClick={() => window.open(image, '_blank')}
-                      className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all rounded-lg flex items-center justify-center"
-                    >
-                      <span className="text-white opacity-0 group-hover:opacity-100 font-medium">
-                        View Full Size
-                      </span>
-                    </button>
+                    />
                   </div>
                 ))}
               </div>
@@ -470,11 +495,34 @@ const BookingDetails = () => {
           </Card>
         )}
 
-        {/* Booking Timeline Card */}
+        {/* Budget Information Card */}
+        {booking.customerBudget && (
+          <Card>
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Budget Information</h2>
+              <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg">
+                <div>
+                  <p className="text-sm text-gray-600">Minimum Budget</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    LKR {booking.customerBudget.min?.toLocaleString() || 'Not specified'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-600">Maximum Budget</p>
+                  <p className="text-lg font-semibold text-blue-600">
+                    LKR {booking.customerBudget.max?.toLocaleString() || 'Not specified'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Timeline Card */}
         <Card>
           <div className="p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Booking Timeline</h2>
-            <div className="space-y-3 text-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h2>
+            <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Created</span>
                 <span className="text-gray-900 font-medium">
