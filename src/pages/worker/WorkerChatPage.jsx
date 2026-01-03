@@ -15,8 +15,9 @@ import {
 } from 'lucide-react';
 
 /**
- * Worker Chat Page
- * Real-time messaging between worker and customer
+ * Worker Chat Page - FINAL FIXED VERSION
+ * ✅ Uses correct storage keys: 'user' and 'fixmate_user'
+ * ✅ Proper message alignment based on sender ID
  */
 const WorkerChatPage = () => {
   const { customerId } = useParams();
@@ -50,23 +51,62 @@ const WorkerChatPage = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // ✅ FIXED: Get token using correct storage keys
   const getToken = () => {
-    return localStorage.getItem('fixmate_auth_token') || 
-           sessionStorage.getItem('authToken') ||
-           sessionStorage.getItem('fixmate_auth_token');
+    return sessionStorage.getItem('authToken') ||
+           localStorage.getItem('authToken') ||
+           sessionStorage.getItem('fixmate_auth_token') ||
+           localStorage.getItem('fixmate_auth_token');
   };
 
+  // ✅ FIXED: Get current user ID using correct storage keys
   const getCurrentUserId = () => {
-    const userStr = sessionStorage.getItem('user') || localStorage.getItem('user');
+    const userStr = sessionStorage.getItem('user') || 
+                   localStorage.getItem('user') ||
+                   sessionStorage.getItem('fixmate_user') ||
+                   localStorage.getItem('fixmate_user');
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
-        return user._id || user.id;
+        const userId = user._id || user.id;
+        console.log('👤 Current Worker ID:', userId);
+        return userId;
       } catch (error) {
         console.error('Error parsing user:', error);
       }
     }
+    console.log('❌ No user data found in storage');
     return null;
+  };
+
+  // ✅ FIXED: Check if message is from current user (worker)
+  const isMyMessage = (message) => {
+    const currentUserId = getCurrentUserId();
+    if (!currentUserId || !message) {
+      console.log('⚠️ Missing data for comparison');
+      return false;
+    }
+
+    // Get sender ID - handle both object and string formats
+    let senderId = message.senderId;
+    if (typeof senderId === 'object' && senderId !== null) {
+      senderId = senderId._id || senderId.id;
+    }
+
+    // Convert both to strings for comparison
+    const senderIdStr = String(senderId);
+    const currentUserIdStr = String(currentUserId);
+    
+    const isMatch = senderIdStr === currentUserIdStr;
+
+    console.log('🔍 Message Ownership:', {
+      currentUser: currentUserIdStr,
+      sender: senderIdStr,
+      isMatch: isMatch,
+      message: message.message?.substring(0, 20)
+    });
+
+    return isMatch;
   };
 
   const loadMessages = async () => {
@@ -104,7 +144,13 @@ const WorkerChatPage = () => {
           const firstMessage = messagesData[0];
           const currentUserId = getCurrentUserId();
           
-          const otherUserData = firstMessage.senderId?._id === currentUserId 
+          // Get sender ID - handle object format
+          let senderId = firstMessage.senderId;
+          if (typeof senderId === 'object' && senderId !== null) {
+            senderId = senderId._id || senderId.id;
+          }
+          
+          const otherUserData = String(senderId) === String(currentUserId)
             ? firstMessage.receiverId 
             : firstMessage.senderId;
           
@@ -279,11 +325,6 @@ const WorkerChatPage = () => {
     return groups;
   };
 
-  const isMyMessage = (message) => {
-    const currentUserId = getCurrentUserId();
-    return message.senderId?._id === currentUserId || message.senderId === currentUserId;
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -393,7 +434,7 @@ const WorkerChatPage = () => {
                     </div>
                   </div>
 
-                  {/* Messages */}
+                  {/* Messages - FIXED ALIGNMENT */}
                   <div className="space-y-3">
                     {dateMessages.map((message, index) => {
                       const isMine = isMyMessage(message);
@@ -402,13 +443,13 @@ const WorkerChatPage = () => {
                           key={message._id || index}
                           className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}
                         >
-                          <div className={`max-w-[70%] ${isMine ? 'order-2' : 'order-1'}`}>
+                          <div className={`max-w-[70%]`}>
                             {/* Message Bubble */}
                             <div
                               className={`rounded-2xl px-4 py-2 ${
                                 isMine
-                                  ? 'bg-indigo-600 text-white rounded-tr-none'
-                                  : 'bg-white border border-gray-200 text-gray-900 rounded-tl-none'
+                                  ? 'bg-indigo-600 text-white rounded-br-none'
+                                  : 'bg-white border border-gray-200 text-gray-900 rounded-bl-none'
                               }`}
                             >
                               {message.messageType === 'image' && message.mediaUrl && (

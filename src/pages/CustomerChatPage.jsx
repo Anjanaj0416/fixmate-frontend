@@ -6,19 +6,18 @@ import {
   Image as ImageIcon,
   Phone,
   Video,
-  MoreVertical,
-  Paperclip
+  MoreVertical
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5001';
 
 /**
- * CustomerChatPage Component
- * Full conversation view with messaging capability
- * Works with both worker chat (from booking) and message list (from conversations)
+ * CustomerChatPage Component - FINAL FIXED VERSION
+ * ✅ Uses correct storage keys: 'user' and 'fixmate_user'
+ * ✅ Proper message alignment based on sender ID
  */
 const CustomerChatPage = () => {
-  const { workerId } = useParams(); // Can be workerId or any userId
+  const { workerId } = useParams();
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -33,44 +32,86 @@ const CustomerChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
 
-  // Get current user ID from storage
+  // ✅ FIXED: Get current user ID using correct storage keys
   const getCurrentUserId = () => {
     try {
-      const userData = localStorage.getItem('userData') || 
-                      sessionStorage.getItem('userData') ||
-                      localStorage.getItem('user') ||
-                      sessionStorage.getItem('user');
-      if (!userData) return null;
-      const parsed = JSON.parse(userData);
-      return parsed._id || parsed.id;
+      // Try all possible storage locations
+      const userStr = sessionStorage.getItem('user') || 
+                     localStorage.getItem('user') ||
+                     sessionStorage.getItem('fixmate_user') ||
+                     localStorage.getItem('fixmate_user') ||
+                     sessionStorage.getItem('userData') ||
+                     localStorage.getItem('userData');
+      
+      if (!userStr) {
+        console.log('❌ No user data found in storage');
+        return null;
+      }
+      
+      const parsed = JSON.parse(userStr);
+      const userId = parsed._id || parsed.id;
+      console.log('👤 Current User ID:', userId);
+      return userId;
     } catch (error) {
       console.error('Error getting current user ID:', error);
       return null;
     }
   };
 
-  // Get auth token
+  // ✅ FIXED: Get auth token using correct storage keys
   const getToken = () => {
-    return localStorage.getItem('fixmate_auth_token') || 
-           localStorage.getItem('authToken') || 
-           localStorage.getItem('userToken');
+    return sessionStorage.getItem('authToken') ||
+           localStorage.getItem('authToken') ||
+           sessionStorage.getItem('fixmate_auth_token') ||
+           localStorage.getItem('fixmate_auth_token');
   };
 
   // Load current user
   const loadCurrentUser = () => {
     try {
-      const userData = localStorage.getItem('userData') || 
-                      sessionStorage.getItem('userData') ||
-                      localStorage.getItem('user') ||
-                      sessionStorage.getItem('user');
-      if (userData) {
-        const user = JSON.parse(userData);
+      const userStr = sessionStorage.getItem('user') || 
+                     localStorage.getItem('user') ||
+                     sessionStorage.getItem('fixmate_user') ||
+                     localStorage.getItem('fixmate_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
         console.log('✅ Current user loaded:', user);
         setCurrentUser(user);
       }
     } catch (error) {
       console.error('❌ Error loading current user:', error);
     }
+  };
+
+  // ✅ FIXED: Check if message is from current user
+  const isMyMessage = (message) => {
+    const currentUserId = getCurrentUserId();
+    
+    if (!currentUserId || !message) {
+      console.log('⚠️ Missing data for comparison');
+      return false;
+    }
+
+    // Extract sender ID - handle both object and string formats
+    let senderId = message.senderId;
+    if (typeof senderId === 'object' && senderId !== null) {
+      senderId = senderId._id || senderId.id;
+    }
+
+    // Convert both to strings for comparison
+    const senderIdStr = String(senderId);
+    const currentUserIdStr = String(currentUserId);
+
+    const isMatch = senderIdStr === currentUserIdStr;
+    
+    console.log('🔍 Message Ownership:', {
+      currentUser: currentUserIdStr,
+      sender: senderIdStr,
+      isMatch: isMatch,
+      message: message.message?.substring(0, 20)
+    });
+
+    return isMatch;
   };
 
   // Load messages
@@ -81,7 +122,7 @@ const CustomerChatPage = () => {
         throw new Error('Please login to view messages');
       }
 
-      console.log('📥 Loading conversation with user:', workerId);
+      console.log('📥 Loading conversation with worker:', workerId);
 
       const response = await fetch(`${API_BASE_URL}/chat/conversations/${workerId}`, {
         method: 'GET',
@@ -102,7 +143,6 @@ const CustomerChatPage = () => {
       console.log('✅ Messages loaded:', data);
 
       if (data.success && data.data) {
-        // Extract messages
         let messagesData = [];
         if (Array.isArray(data.data.messages)) {
           messagesData = data.data.messages;
@@ -117,19 +157,23 @@ const CustomerChatPage = () => {
           const currentUserId = getCurrentUserId();
           const firstMessage = messagesData[0];
           
+          // Get sender ID
+          let senderId = firstMessage.senderId;
+          if (typeof senderId === 'object' && senderId !== null) {
+            senderId = senderId._id || senderId.id;
+          }
+          
           // Determine who is the other user
-          const otherUserData = firstMessage.senderId?._id === currentUserId 
+          const otherUserData = String(senderId) === String(currentUserId)
             ? firstMessage.receiverId 
             : firstMessage.senderId;
           
-          console.log('👤 Other user:', otherUserData);
+          console.log('👥 Other user:', otherUserData);
           setOtherUser(otherUserData);
         } else {
-          // If no messages yet, try to load worker profile
           await loadWorkerProfile();
         }
 
-        // Mark messages as read
         await markMessagesAsRead();
       }
     } catch (error) {
@@ -355,8 +399,6 @@ const CustomerChatPage = () => {
     scrollToBottom();
   }, [messages]);
 
-  const currentUserId = getCurrentUserId();
-
   // Loading state
   if (loading) {
     return (
@@ -405,14 +447,7 @@ const CustomerChatPage = () => {
                       {otherUser.fullName || otherUser.name || 'User'}
                     </h2>
                     <p className="text-xs text-gray-500">
-                      {otherUser.isOnline ? (
-                        <span className="flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                          Online
-                        </span>
-                      ) : (
-                        otherUser.role === 'worker' ? 'Service Provider' : 'Customer'
-                      )}
+                      Service Provider
                     </p>
                   </div>
                 </div>
@@ -476,8 +511,7 @@ const CustomerChatPage = () => {
           ) : (
             <div className="space-y-4">
               {messages.map((message, index) => {
-                const isOwn = message.senderId?._id === currentUserId || 
-                              message.senderId === currentUserId;
+                const isMine = isMyMessage(message);
                 const showDateSeparator = shouldShowDateSeparator(
                   message, 
                   index > 0 ? messages[index - 1] : null
@@ -493,11 +527,12 @@ const CustomerChatPage = () => {
                       </div>
                     )}
 
-                    <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
+                    {/* Message Bubble - FIXED ALIGNMENT */}
+                    <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[70%]`}>
                         <div
                           className={`rounded-2xl px-4 py-2 ${
-                            isOwn
+                            isMine
                               ? 'bg-indigo-600 text-white rounded-br-none'
                               : 'bg-white text-gray-900 border border-gray-200 rounded-bl-none'
                           }`}
@@ -518,11 +553,11 @@ const CustomerChatPage = () => {
 
                           <div className="flex items-center justify-end gap-1 mt-1">
                             <span className={`text-xs ${
-                              isOwn ? 'text-indigo-200' : 'text-gray-500'
+                              isMine ? 'text-indigo-200' : 'text-gray-500'
                             }`}>
                               {formatTime(message.timestamp || message.createdAt)}
                             </span>
-                            {isOwn && (
+                            {isMine && (
                               <span className="text-xs text-indigo-200">
                                 {message.isRead ? '✓✓' : '✓'}
                               </span>
