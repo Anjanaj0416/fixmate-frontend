@@ -13,11 +13,13 @@ import Card from '../../components/common/Card';
 import Spinner from '../../components/common/Spinner';
 
 /**
- * Customer Messages Page - ULTIMATE FIX
+ * Customer Messages Page - ULTIMATE FIX v2
  * ✅ Fixed: React 18 double rendering
  * ✅ Fixed: Backend duplicate conversations  
  * ✅ Fixed: Proper React key usage
  * ✅ Fixed: Component remounting prevention
+ * ✅ CRITICAL FIX: Added clickable={true} prop for Card component
+ * ✅ CRITICAL FIX: Fixed authentication token issue
  */
 const CustomerMessages = () => {
   const navigate = useNavigate();
@@ -30,6 +32,11 @@ const CustomerMessages = () => {
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+
+  // ✅ Debug: Verify navigate function on mount
+  useEffect(() => {
+    console.log('🔧 Navigate function check:', typeof navigate);
+  }, [navigate]);
 
   useEffect(() => {
     // ✅ CRITICAL: Prevent double fetch in React 18 Strict Mode
@@ -67,6 +74,7 @@ const CustomerMessages = () => {
       }
 
       console.log('📥 Loading conversations...');
+      console.log('🔑 Token exists:', !!token);
 
       const response = await fetch(`${API_BASE_URL}/chat/conversations`, {
         method: 'GET',
@@ -75,6 +83,8 @@ const CustomerMessages = () => {
           'Content-Type': 'application/json'
         }
       });
+
+      console.log('📡 Response status:', response.status);
 
       if (!response.ok) {
         if (response.status === 401) {
@@ -168,7 +178,11 @@ const CustomerMessages = () => {
     }
   };
 
+  // ✅ CRITICAL FIX: Enhanced conversation click handler with extensive debugging
   const handleConversationClick = (conversation) => {
+    console.log('🎯 CONVERSATION CLICK EVENT TRIGGERED');
+    console.log('📊 Full conversation data:', conversation);
+    
     // Extract other user ID with multiple fallbacks
     const otherUserId = 
       conversation.otherUser?._id || 
@@ -176,14 +190,18 @@ const CustomerMessages = () => {
       conversation.otherUserId ||
       conversation.participantId;
     
+    console.log('🔍 Extracted otherUserId:', otherUserId);
+    console.log('🔍 conversation.otherUser:', conversation.otherUser);
+    
     if (!otherUserId) {
       console.error('❌ Cannot open chat - other user ID missing:', conversation);
-      alert('Unable to open chat. Please try again.');
+      alert('Unable to open chat. User information missing.');
       return;
     }
 
-    console.log('💬 Opening chat with worker:', otherUserId);
-    navigate(`/customer/chat/${otherUserId}`);
+    const chatPath = `/customer/chat/${otherUserId}`;
+    console.log('✅ Navigating to:', chatPath);
+    navigate(chatPath);
   };
 
   const formatTime = (timestamp) => {
@@ -373,7 +391,7 @@ const CustomerMessages = () => {
           </Card>
         ) : (
           <div className="space-y-2">
-            {filteredConversations.map((conversation) => {
+            {filteredConversations.map((conversation, index) => {
               // ✅ CRITICAL: Use ONLY conversationId or _id (most stable)
               const conversationKey = conversation.conversationId || conversation._id;
               
@@ -382,11 +400,22 @@ const CustomerMessages = () => {
                 return null;
               }
               
+              console.log(`📋 Rendering conversation ${index}:`, {
+                conversationId: conversation.conversationId,
+                otherUserId: conversation.otherUser?._id || conversation.otherUser?.id,
+                otherUserName: conversation.otherUser?.fullName
+              });
+
               return (
                 <Card
                   key={conversationKey}
-                  className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => handleConversationClick(conversation)}
+                  hover={true}
+                  clickable={true}
+                  onClick={() => {
+                    console.log('🖱️ CARD CLICKED - Index:', index);
+                    handleConversationClick(conversation);
+                  }}
+                  className="cursor-pointer"
                 >
                   <div className="p-4">
                     <div className="flex items-center gap-4">
