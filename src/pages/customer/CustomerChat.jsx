@@ -3,22 +3,22 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Send, 
-  Image as ImageIcon,
+  Image as ImageIcon, 
+  Paperclip,
+  MoreVertical,
   Phone,
   Video,
-  MoreVertical,
-  Paperclip
+  Info
 } from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:5001';
 
 /**
- * CustomerChatPage Component
- * Full conversation view with messaging capability
- * Works with both worker chat (from booking) and message list (from conversations)
+ * CustomerChat Component
+ * Displays conversation messages and allows sending replies
  */
-const CustomerChatPage = () => {
-  const { workerId } = useParams(); // Can be workerId or any userId
+const CustomerChat = () => {
+  const { userId } = useParams(); // The other user's ID from URL
   const navigate = useNavigate();
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -31,15 +31,16 @@ const CustomerChatPage = () => {
   const [newMessage, setNewMessage] = useState('');
   const [otherUser, setOtherUser] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+
+  // Scroll to bottom of messages
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
   // Get current user ID from storage
   const getCurrentUserId = () => {
     try {
-      const userData = localStorage.getItem('userData') || 
-                      sessionStorage.getItem('userData') ||
-                      localStorage.getItem('user') ||
-                      sessionStorage.getItem('user');
+      const userData = localStorage.getItem('userData');
       if (!userData) return null;
       const parsed = JSON.parse(userData);
       return parsed._id || parsed.id;
@@ -49,41 +50,20 @@ const CustomerChatPage = () => {
     }
   };
 
-  // Get auth token
-  const getToken = () => {
-    return localStorage.getItem('fixmate_auth_token') || 
-           localStorage.getItem('authToken') || 
-           localStorage.getItem('userToken');
-  };
-
-  // Load current user
-  const loadCurrentUser = () => {
-    try {
-      const userData = localStorage.getItem('userData') || 
-                      sessionStorage.getItem('userData') ||
-                      localStorage.getItem('user') ||
-                      sessionStorage.getItem('user');
-      if (userData) {
-        const user = JSON.parse(userData);
-        console.log('✅ Current user loaded:', user);
-        setCurrentUser(user);
-      }
-    } catch (error) {
-      console.error('❌ Error loading current user:', error);
-    }
-  };
-
   // Load messages
   const loadMessages = async () => {
     try {
-      const token = getToken();
+      const token = localStorage.getItem('fixmate_auth_token') || 
+                    localStorage.getItem('authToken') || 
+                    localStorage.getItem('userToken');
+
       if (!token) {
         throw new Error('Please login to view messages');
       }
 
-      console.log('📥 Loading conversation with user:', workerId);
+      console.log('📥 Loading conversation with user:', userId);
 
-      const response = await fetch(`${API_BASE_URL}/chat/conversations/${workerId}`, {
+      const response = await fetch(`${API_BASE_URL}/chat/conversations/${userId}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -122,11 +102,7 @@ const CustomerChatPage = () => {
             ? firstMessage.receiverId 
             : firstMessage.senderId;
           
-          console.log('👤 Other user:', otherUserData);
           setOtherUser(otherUserData);
-        } else {
-          // If no messages yet, try to load worker profile
-          await loadWorkerProfile();
         }
 
         // Mark messages as read
@@ -140,50 +116,16 @@ const CustomerChatPage = () => {
     }
   };
 
-  // Load worker profile (fallback when no messages exist)
-  const loadWorkerProfile = async () => {
-    try {
-      const token = getToken();
-      const response = await fetch(`${API_BASE_URL}/workers/${workerId}/profile`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        let workerData = null;
-        if (data.data?.worker) {
-          workerData = data.data.worker;
-        } else if (data.worker) {
-          workerData = data.worker;
-        } else if (data.data) {
-          workerData = data.data;
-        }
-
-        if (workerData?.userId) {
-          setOtherUser({
-            _id: workerData.userId._id || workerData.userId.id,
-            fullName: workerData.userId.fullName || workerData.userId.name,
-            name: workerData.userId.fullName || workerData.userId.name,
-            profileImage: workerData.userId.profileImage,
-            role: 'worker'
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error loading worker profile:', error);
-    }
-  };
-
   // Mark messages as read
   const markMessagesAsRead = async () => {
     try {
-      const token = getToken();
+      const token = localStorage.getItem('fixmate_auth_token') || 
+                    localStorage.getItem('authToken') || 
+                    localStorage.getItem('userToken');
+
+      // Generate conversation ID (this should match backend logic)
       const currentUserId = getCurrentUserId();
-      const conversationId = [currentUserId, workerId].sort().join('_');
+      const conversationId = [currentUserId, userId].sort().join('_');
 
       await fetch(`${API_BASE_URL}/chat/messages/read`, {
         method: 'PUT',
@@ -210,13 +152,16 @@ const CustomerChatPage = () => {
     setError(null);
 
     try {
-      const token = getToken();
+      const token = localStorage.getItem('fixmate_auth_token') || 
+                    localStorage.getItem('authToken') || 
+                    localStorage.getItem('userToken');
+
       if (!token) {
         throw new Error('Please login to send messages');
       }
 
       const messageData = {
-        receiverId: workerId,
+        receiverId: userId,
         message: newMessage.trim(),
         messageType: selectedImage ? 'image' : 'text',
         mediaUrl: selectedImage || undefined
@@ -243,7 +188,7 @@ const CustomerChatPage = () => {
       const data = await response.json();
       console.log('✅ Message sent:', data);
 
-      // Add message to local state immediately
+      // Add message to local state immediately for better UX
       if (data.success && data.data?.message) {
         setMessages(prev => [...prev, data.data.message]);
       }
@@ -254,6 +199,9 @@ const CustomerChatPage = () => {
 
       // Scroll to bottom
       setTimeout(scrollToBottom, 100);
+
+      // Reload messages to get updated data
+      await loadMessages();
     } catch (error) {
       console.error('❌ Error sending message:', error);
       setError(error.message || 'Failed to send message');
@@ -266,17 +214,14 @@ const CustomerChatPage = () => {
   const handleImageSelect = (e) => {
     const file = e.target.files[0];
     if (file) {
+      // In a real app, you'd upload to server first
+      // For now, we'll use a data URL
       const reader = new FileReader();
       reader.onloadend = () => {
         setSelectedImage(reader.result);
       };
       reader.readAsDataURL(file);
     }
-  };
-
-  // Scroll to bottom
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   // Format timestamp
@@ -308,69 +253,53 @@ const CustomerChatPage = () => {
     const now = new Date();
     const diffInDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
 
-    if (diffInDays === 0) return 'Today';
-    if (diffInDays === 1) return 'Yesterday';
-    if (diffInDays < 7) return date.toLocaleDateString('en-US', { weekday: 'long' });
-    return date.toLocaleDateString('en-US', { 
-      month: 'long', 
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    });
+    if (diffInDays === 0) {
+      return 'Today';
+    } else if (diffInDays === 1) {
+      return 'Yesterday';
+    } else if (diffInDays < 7) {
+      return date.toLocaleDateString('en-US', { weekday: 'long' });
+    } else {
+      return date.toLocaleDateString('en-US', { 
+        month: 'long', 
+        day: 'numeric',
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+      });
+    }
   };
 
   // Check if should show date separator
   const shouldShowDateSeparator = (currentMsg, previousMsg) => {
     if (!previousMsg) return true;
+    
     const currentDate = new Date(currentMsg.timestamp || currentMsg.createdAt);
     const previousDate = new Date(previousMsg.timestamp || previousMsg.createdAt);
+    
     return currentDate.toDateString() !== previousDate.toDateString();
   };
 
-  // Handle phone call
-  const handlePhoneCall = () => {
-    if (otherUser?.phoneNumber) {
-      window.location.href = `tel:${otherUser.phoneNumber}`;
-    } else {
-      alert('Phone number not available');
-    }
-  };
-
-  // Handle video call
-  const handleVideoCall = () => {
-    alert('Video calling feature coming soon!');
-  };
-
-  // Load on mount
+  // Load messages on mount and set up auto-refresh
   useEffect(() => {
-    loadCurrentUser();
     loadMessages();
     
     // Auto-refresh every 5 seconds
-    const interval = setInterval(loadMessages, 5000);
+    const interval = setInterval(() => {
+      loadMessages();
+    }, 5000);
+
     return () => clearInterval(interval);
-  }, [workerId]);
+  }, [userId]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
+  // Get current user ID for message comparison
   const currentUserId = getCurrentUserId();
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600">Loading chat...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-3">
@@ -405,14 +334,7 @@ const CustomerChatPage = () => {
                       {otherUser.fullName || otherUser.name || 'User'}
                     </h2>
                     <p className="text-xs text-gray-500">
-                      {otherUser.isOnline ? (
-                        <span className="flex items-center gap-1">
-                          <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                          Online
-                        </span>
-                      ) : (
-                        otherUser.role === 'worker' ? 'Service Provider' : 'Customer'
-                      )}
+                      {otherUser.role === 'worker' ? 'Service Provider' : 'Customer'}
                     </p>
                   </div>
                 </div>
@@ -426,20 +348,14 @@ const CustomerChatPage = () => {
 
             {/* Action buttons */}
             <div className="flex items-center gap-2">
-              <button 
-                onClick={handlePhoneCall}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
+              <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <Phone className="w-5 h-5 text-gray-700" />
               </button>
-              <button 
-                onClick={handleVideoCall}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-              >
+              <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <Video className="w-5 h-5 text-gray-700" />
               </button>
               <button className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                <MoreVertical className="w-5 h-5 text-gray-700" />
+                <Info className="w-5 h-5 text-gray-700" />
               </button>
             </div>
           </div>
@@ -449,8 +365,17 @@ const CustomerChatPage = () => {
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+          {loading ? (
+            // Loading state
+            <div className="flex items-center justify-center py-12">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-gray-600">Loading messages...</p>
+              </div>
+            </div>
+          ) : error ? (
+            // Error state
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
               <p className="text-red-800 font-medium">Error: {error}</p>
               <button
                 onClick={loadMessages}
@@ -459,9 +384,8 @@ const CustomerChatPage = () => {
                 Try again
               </button>
             </div>
-          )}
-
-          {messages.length === 0 ? (
+          ) : messages.length === 0 ? (
+            // Empty state
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Send className="w-8 h-8 text-gray-400" />
@@ -474,6 +398,7 @@ const CustomerChatPage = () => {
               </p>
             </div>
           ) : (
+            // Messages list
             <div className="space-y-4">
               {messages.map((message, index) => {
                 const isOwn = message.senderId?._id === currentUserId || 
@@ -485,6 +410,7 @@ const CustomerChatPage = () => {
 
                 return (
                   <React.Fragment key={message._id || index}>
+                    {/* Date Separator */}
                     {showDateSeparator && (
                       <div className="flex items-center justify-center my-4">
                         <div className="bg-gray-200 text-gray-600 text-xs font-medium px-3 py-1 rounded-full">
@@ -493,8 +419,9 @@ const CustomerChatPage = () => {
                       </div>
                     )}
 
+                    {/* Message Bubble */}
                     <div className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[70%]`}>
+                      <div className={`max-w-[70%] ${isOwn ? 'ml-auto' : 'mr-auto'}`}>
                         <div
                           className={`rounded-2xl px-4 py-2 ${
                             isOwn
@@ -502,6 +429,7 @@ const CustomerChatPage = () => {
                               : 'bg-white text-gray-900 border border-gray-200 rounded-bl-none'
                           }`}
                         >
+                          {/* Image if present */}
                           {message.messageType === 'image' && message.mediaUrl && (
                             <img
                               src={message.mediaUrl}
@@ -510,12 +438,14 @@ const CustomerChatPage = () => {
                             />
                           )}
 
+                          {/* Message text */}
                           {message.message && (
                             <p className="text-sm whitespace-pre-wrap break-words">
                               {message.message}
                             </p>
                           )}
 
+                          {/* Time and read status */}
                           <div className="flex items-center justify-end gap-1 mt-1">
                             <span className={`text-xs ${
                               isOwn ? 'text-indigo-200' : 'text-gray-500'
@@ -543,6 +473,7 @@ const CustomerChatPage = () => {
       {/* Message Input */}
       <div className="bg-white border-t border-gray-200 sticky bottom-0">
         <div className="max-w-4xl mx-auto px-4 py-3">
+          {/* Image preview */}
           {selectedImage && (
             <div className="mb-3 relative inline-block">
               <img
@@ -560,6 +491,7 @@ const CustomerChatPage = () => {
           )}
 
           <form onSubmit={handleSendMessage} className="flex items-end gap-2">
+            {/* Attachment button */}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
@@ -575,6 +507,7 @@ const CustomerChatPage = () => {
               className="hidden"
             />
 
+            {/* Message input */}
             <div className="flex-1">
               <textarea
                 value={newMessage}
@@ -592,6 +525,7 @@ const CustomerChatPage = () => {
               />
             </div>
 
+            {/* Send button */}
             <button
               type="submit"
               disabled={sending || (!newMessage.trim() && !selectedImage)}
@@ -610,4 +544,4 @@ const CustomerChatPage = () => {
   );
 };
 
-export default CustomerChatPage;
+export default CustomerChat;
