@@ -44,9 +44,14 @@ import WorkerBookingRequests from '../pages/worker/WorkerBookingRequests';
 import BookingDetails from '../pages/customer/BookingDetails';
 import CustomerMessages from '../pages/customer/CustomerMessages';
 
+// ✅ NEW: Worker Messaging Components
+import WorkerMessages from '../pages/worker/WorkerMessages';
+import WorkerChatPage from '../pages/worker/WorkerChatPage';
+
 
 /**
  * App Routes Component
+ * ✅ UPDATED: Added worker messaging routes
  * Defines all application routes with proper authentication and role-based access
  */
 const AppRoutes = () => {
@@ -85,7 +90,6 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
-
 
       <Route
         path="/customer/quote-request"
@@ -150,7 +154,7 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
-       <Route
+      <Route
         path="/customer/messages"
         element={
           <PrivateRoute>
@@ -160,18 +164,7 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
-     
 
-      <Route
-        path="/worker/edit-profile"
-        element={
-          <PrivateRoute>
-            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
-              <WorkerEditProfile />
-            </RoleBasedRoute>
-          </PrivateRoute>
-        }
-      />
       <Route
         path="/customer/chat/:workerId"
         element={
@@ -250,6 +243,39 @@ const AppRoutes = () => {
           <PrivateRoute>
             <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
               <WorkerProfilePage />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/worker/edit-profile"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerEditProfile />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      {/* ✅ NEW: Worker Messaging Routes */}
+      <Route
+        path="/worker/messages"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerMessages />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/worker/chat/:customerId"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerChatPage />
             </RoleBasedRoute>
           </PrivateRoute>
         }

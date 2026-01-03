@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, DollarSign, Clock, User, AlertCircle } from 'lucide-react';
+import { Calendar, MapPin, DollarSign, Clock, User, AlertCircle, MessageCircle } from 'lucide-react';
 
 /**
- * Worker Booking Requests Page - FIXED
+ * Worker Booking Requests Page - UPDATED WITH MESSAGING
+ * ✅ NEW: Added "Message Customer" button to each booking request
  * View and manage incoming quote requests from customers
  */
 const WorkerBookingRequests = () => {
@@ -71,6 +72,31 @@ const WorkerBookingRequests = () => {
     }
     setSelectedRequest(request);
     setShowDeclineModal(true);
+  };
+
+  // ✅ NEW: Handle message customer
+  const handleMessageCustomer = (request) => {
+    if (!request?.customerId) {
+      alert('Customer information not available');
+      return;
+    }
+
+    // Handle both object and string customerId
+    let customerId;
+    if (typeof request.customerId === 'object') {
+      customerId = request.customerId._id || request.customerId.id;
+    } else {
+      customerId = request.customerId;
+    }
+
+    if (!customerId) {
+      console.error('❌ Could not extract customer ID:', request.customerId);
+      alert('Unable to open chat. Customer information is incomplete.');
+      return;
+    }
+
+    console.log('💬 Opening chat with customer:', customerId);
+    navigate(`/worker/chat/${customerId}`);
   };
 
   const submitAccept = async (quoteData) => {
@@ -223,9 +249,9 @@ const WorkerBookingRequests = () => {
             </p>
             <button
               onClick={() => navigate('/worker/dashboard')}
-              className="mt-4 text-indigo-600 hover:text-indigo-700 font-medium"
+              className="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700"
             >
-              ← Back to Dashboard
+              Back to Dashboard
             </button>
           </div>
         ) : (
@@ -236,6 +262,7 @@ const WorkerBookingRequests = () => {
                 request={request}
                 onAccept={handleAccept}
                 onDecline={handleDecline}
+                onMessage={handleMessageCustomer}
               />
             ))}
           </div>
@@ -268,168 +295,179 @@ const WorkerBookingRequests = () => {
   );
 };
 
-// Request Card Component
-const RequestCard = ({ request, onAccept, onDecline }) => {
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'quote_requested':
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'accepted':
-        return 'bg-green-100 text-green-800';
-      case 'declined':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
+// Request Card Component - ✅ UPDATED: Added message button
+const RequestCard = ({ request, onAccept, onDecline, onMessage }) => {
   const canRespond = request.status === 'quote_requested' || request.status === 'pending';
-
+  
   return (
-    <div className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow p-6">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
-        {/* Left side - Request details */}
-        <div className="flex-1">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-4">
-            <h3 className="text-xl font-bold text-gray-900 capitalize">
-              {request.serviceType}
-            </h3>
-            <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(
-                request.status
-              )}`}
-            >
-              {request.status.replace('_', ' ').toUpperCase()}
-            </span>
-          </div>
-
-          {/* Customer info */}
-          <div className="flex items-center gap-3 mb-4 p-3 bg-gray-50 rounded-lg">
-            <img
-              src={request.customerId?.profileImage || '/default-avatar.png'}
-              alt={request.customerId?.fullName || 'Customer'}
-              className="w-12 h-12 rounded-full object-cover"
-            />
-            <div>
-              <p className="font-medium text-gray-900">
-                {request.customerId?.fullName || 'Customer'}
-              </p>
-              <p className="text-sm text-gray-600">
-                {request.customerId?.phoneNumber || 'No phone'}
-              </p>
-            </div>
-          </div>
-
-          {/* Request details */}
-          <div className="space-y-3">
-            {/* Location */}
-            <div className="flex items-start gap-2">
-              <MapPin className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="p-6">
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left side - Info */}
+          <div className="flex-1">
+            <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-sm font-medium text-gray-700">Location</p>
-                <p className="text-sm text-gray-600">
-                  {request.serviceLocation?.town}, {request.serviceLocation?.district}
+                <h3 className="text-xl font-bold text-gray-900 capitalize">
+                  {request.serviceType}
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  ID: {request._id.slice(-8)}
                 </p>
               </div>
+              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                request.status === 'quote_requested' || request.status === 'pending'
+                  ? 'bg-yellow-100 text-yellow-800'
+                  : request.status === 'accepted'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-gray-100 text-gray-800'
+              }`}>
+                {request.status.replace('_', ' ').toUpperCase()}
+              </span>
             </div>
-
-            {/* Issue Location */}
-            {request.issueLocation && (
-              <div className="flex items-start gap-2">
-                <svg className="w-5 h-5 text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-                </svg>
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Issue Location</p>
-                  <p className="text-sm text-gray-600">{request.issueLocation}</p>
-                </div>
-              </div>
-            )}
 
             {/* Description */}
             {request.problemDescription && (
-              <div className="flex items-start gap-2">
-                <svg className="w-5 h-5 text-gray-400 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Description</p>
-                  <p className="text-sm text-gray-600">{request.problemDescription}</p>
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-700 mb-1">Description</p>
+                <p className="text-sm text-gray-600">{request.problemDescription}</p>
+              </div>
+            )}
+
+            {/* Details Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Customer */}
+              {request.customerId && (
+                <div className="flex items-start gap-2">
+                  <User className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Customer</p>
+                    <p className="text-sm text-gray-600">
+                      {request.customerId.fullName || request.customerId.name || 'Customer'}
+                    </p>
+                    {request.customerId.phoneNumber && (
+                      <p className="text-xs text-gray-500">{request.customerId.phoneNumber}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Location */}
+              {request.serviceLocation && (
+                <div className="flex items-start gap-2">
+                  <MapPin className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Location</p>
+                    <p className="text-sm text-gray-600">
+                      {request.serviceLocation.city || request.serviceLocation.address}
+                    </p>
+                    {request.serviceLocation.address && request.serviceLocation.city && (
+                      <p className="text-xs text-gray-500">{request.serviceLocation.address}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Scheduled Date */}
+              {request.scheduledDate && (
+                <div className="flex items-start gap-2">
+                  <Calendar className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Scheduled Date</p>
+                    <p className="text-sm text-gray-600">
+                      {new Date(request.scheduledDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Budget */}
+              {request.budgetRange && (
+                <div className="flex items-start gap-2">
+                  <DollarSign className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Budget</p>
+                    <p className="text-sm text-gray-600">LKR {request.budgetRange}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Urgency */}
+              {request.urgency && (
+                <div className="flex items-start gap-2">
+                  <Clock className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Urgency</p>
+                    <p className="text-sm text-gray-600 capitalize">{request.urgency}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Problem Images */}
+            {request.problemImages && request.problemImages.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-gray-700 mb-2">Problem Images</p>
+                <div className="flex gap-2 overflow-x-auto">
+                  {request.problemImages.map((img, idx) => (
+                    <img
+                      key={idx}
+                      src={img}
+                      alt={`Problem ${idx + 1}`}
+                      className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80"
+                      onClick={() => window.open(img, '_blank')}
+                    />
+                  ))}
                 </div>
               </div>
             )}
 
-            {/* Budget */}
-            {request.budgetRange && (
-              <div className="flex items-start gap-2">
-                <DollarSign className="w-5 h-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Budget</p>
-                  <p className="text-sm text-gray-600">LKR {request.budgetRange}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Urgency */}
-            {request.urgency && (
-              <div className="flex items-start gap-2">
-                <Clock className="w-5 h-5 text-gray-400 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-gray-700">Urgency</p>
-                  <p className="text-sm text-gray-600 capitalize">{request.urgency}</p>
-                </div>
-              </div>
-            )}
+            {/* Date */}
+            <p className="text-xs text-gray-500 mt-4">
+              Received: {new Date(request.createdAt).toLocaleString()}
+            </p>
           </div>
 
-          {/* Problem Images */}
-          {request.problemImages && request.problemImages.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-medium text-gray-700 mb-2">Problem Images</p>
-              <div className="flex gap-2 overflow-x-auto">
-                {request.problemImages.map((img, idx) => (
-                  <img
-                    key={idx}
-                    src={img}
-                    alt={`Problem ${idx + 1}`}
-                    className="w-24 h-24 object-cover rounded-lg cursor-pointer hover:opacity-80"
-                    onClick={() => window.open(img, '_blank')}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Date */}
-          <p className="text-xs text-gray-500 mt-4">
-            Received: {new Date(request.createdAt).toLocaleString()}
-          </p>
-        </div>
-
-        {/* Right side - Actions */}
-        <div className="flex flex-col gap-2 lg:w-48">
-          {canRespond ? (
-            <>
-              <button
-                onClick={() => onAccept(request)}
-                className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors"
-              >
-                Accept & Quote
-              </button>
-              <button
-                onClick={() => onDecline(request)}
-                className="w-full px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-              >
-                Decline
-              </button>
-            </>
-          ) : (
-            <div className="text-center text-sm text-gray-600 p-3 bg-gray-50 rounded-lg">
-              Already {request.status === 'accepted' ? 'accepted' : 'responded'}
-            </div>
-          )}
+          {/* Right side - Actions - ✅ UPDATED: Added message button */}
+          <div className="flex flex-col gap-2 lg:w-48">
+            {canRespond ? (
+              <>
+                <button
+                  onClick={() => onAccept(request)}
+                  className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors"
+                >
+                  Accept & Quote
+                </button>
+                <button
+                  onClick={() => onDecline(request)}
+                  className="w-full px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                >
+                  Decline
+                </button>
+                {/* ✅ NEW: Message Customer Button */}
+                <button
+                  onClick={() => onMessage(request)}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Message Customer
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="text-center text-sm text-gray-600 p-3 bg-gray-50 rounded-lg">
+                  Already {request.status === 'accepted' ? 'accepted' : 'responded'}
+                </div>
+                {/* ✅ NEW: Message button also available for already responded requests */}
+                <button
+                  onClick={() => onMessage(request)}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  Message Customer
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>

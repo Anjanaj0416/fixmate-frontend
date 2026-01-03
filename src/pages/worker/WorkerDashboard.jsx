@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle } from 'lucide-react';
+import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle, MessageCircle } from 'lucide-react';
 
 /**
- * Worker Dashboard Component - FIXED VERSION
- * ✅ Active Jobs card is now clickable
+ * Worker Dashboard Component - UPDATED WITH MESSAGING
+ * ✅ Active Jobs card is clickable
  * ✅ View All Jobs button works correctly
+ * ✅ NEW: Messages button added to Quick Actions
  * ✅ All navigation paths maintained
  */
 const WorkerDashboard = () => {
@@ -310,13 +311,13 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Quick Actions - ✅ View All Jobs button works */}
+        {/* Quick Actions - ✅ UPDATED: Added Messages button */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
           </div>
           <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <button
                 onClick={() => navigate('/worker/requests')}
                 className="flex items-center justify-center gap-2 bg-yellow-600 text-white px-4 py-3 rounded-lg hover:bg-yellow-700 transition-colors"
@@ -337,6 +338,14 @@ const WorkerDashboard = () => {
               >
                 <Briefcase className="w-5 h-5" />
                 View All Jobs
+              </button>
+              {/* ✅ NEW: Messages Button */}
+              <button
+                onClick={() => navigate('/worker/messages')}
+                className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <MessageCircle className="w-5 h-5" />
+                Messages
               </button>
               <button
                 onClick={() => navigate('/worker/earnings')}

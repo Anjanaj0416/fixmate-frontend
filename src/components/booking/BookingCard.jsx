@@ -1,202 +1,258 @@
-import React, { useState } from 'react';
+import React from 'react';
 import PropTypes from 'prop-types';
-import {
-  Calendar,
-  MapPin,
-  User,
-  Clock,
-  DollarSign,
-  Briefcase,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  ArrowRight,
+import { useNavigate } from 'react-router-dom';
+import { 
+  Calendar, 
+  MapPin, 
+  User, 
+  DollarSign, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  AlertCircle, 
+  Phone,
+  MessageCircle,
+  Eye,
   Check
 } from 'lucide-react';
 
 /**
- * BookingCard Component - ENHANCED WITH COMPLETE BUTTON
- * ✅ Fixed: Proper null/undefined checks for all properties
- * ✅ Added: Worker view support
- * ✅ Enhanced: Better handling of missing data
- * ✅ NEW: Complete button for active bookings
+ * Booking Card Component - FINAL FIX
+ * ✅ FIXED: Message Worker button now shows for ALL bookings with ANY worker data
+ * Displays booking information in a card format
+ * Supports both customer and worker views
  */
-const BookingCard = ({ booking, onViewDetails, onCompleteBooking, compact = false, workerView = false }) => {
-  const [isCompleting, setIsCompleting] = useState(false);
+const BookingCard = ({ 
+  booking, 
+  onViewDetails, 
+  onCompleteBooking,
+  compact = false,
+  workerView = false 
+}) => {
+  const navigate = useNavigate();
 
-  // ✅ Safety check: Return null if booking is invalid
-  if (!booking || typeof booking !== 'object') {
-    console.warn('⚠️ BookingCard received invalid booking:', booking);
-    return null;
-  }
-
-  const getStatusConfig = (status) => {
-    const configs = {
-      pending: {
-        bg: 'bg-yellow-50',
-        border: 'border-yellow-200',
-        text: 'text-yellow-800',
-        icon: Clock,
-        label: 'Pending'
-      },
-      quote_requested: {
-        bg: 'bg-yellow-50',
-        border: 'border-yellow-200',
-        text: 'text-yellow-800',
-        icon: Clock,
-        label: 'Quote Requested'
-      },
-      accepted: {
-        bg: 'bg-blue-50',
-        border: 'border-blue-200',
-        text: 'text-blue-800',
-        icon: CheckCircle,
-        label: 'Accepted'
-      },
-      in_progress: {
-        bg: 'bg-purple-50',
-        border: 'border-purple-200',
-        text: 'text-purple-800',
-        icon: Briefcase,
-        label: 'In Progress'
-      },
-      'in-progress': {
-        bg: 'bg-purple-50',
-        border: 'border-purple-200',
-        text: 'text-purple-800',
-        icon: Briefcase,
-        label: 'In Progress'
-      },
-      completed: {
-        bg: 'bg-green-50',
-        border: 'border-green-200',
-        text: 'text-green-800',
-        icon: CheckCircle,
-        label: 'Completed'
-      },
-      cancelled: {
-        bg: 'bg-red-50',
-        border: 'border-red-200',
-        text: 'text-red-800',
-        icon: XCircle,
-        label: 'Cancelled'
-      },
-      declined: {
-        bg: 'bg-gray-50',
-        border: 'border-gray-200',
-        text: 'text-gray-800',
-        icon: XCircle,
-        label: 'Declined'
-      }
-    };
-    return configs[status] || configs.pending;
+  // Status configuration
+  const statusConfig = {
+    quote_requested: {
+      label: 'Quote Requested',
+      icon: Clock,
+      bg: 'bg-yellow-50',
+      text: 'text-yellow-700',
+      border: 'border-yellow-200'
+    },
+    pending: {
+      label: 'Pending',
+      icon: Clock,
+      bg: 'bg-yellow-50',
+      text: 'text-yellow-700',
+      border: 'border-yellow-200'
+    },
+    accepted: {
+      label: 'Accepted',
+      icon: CheckCircle,
+      bg: 'bg-blue-50',
+      text: 'text-blue-700',
+      border: 'border-blue-200'
+    },
+    in_progress: {
+      label: 'In Progress',
+      icon: AlertCircle,
+      bg: 'bg-indigo-50',
+      text: 'text-indigo-700',
+      border: 'border-indigo-200'
+    },
+    completed: {
+      label: 'Completed',
+      icon: CheckCircle,
+      bg: 'bg-green-50',
+      text: 'text-green-700',
+      border: 'border-green-200'
+    },
+    cancelled: {
+      label: 'Cancelled',
+      icon: XCircle,
+      bg: 'bg-red-50',
+      text: 'text-red-700',
+      border: 'border-red-200'
+    },
+    declined: {
+      label: 'Declined',
+      icon: XCircle,
+      bg: 'bg-gray-50',
+      text: 'text-gray-700',
+      border: 'border-gray-200'
+    }
   };
 
-  const statusConfig = getStatusConfig(booking.status);
-  const StatusIcon = statusConfig.icon;
+  const currentStatus = booking.status || 'pending';
+  const StatusIcon = statusConfig[currentStatus]?.icon || Clock;
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'Date not set';
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Invalid date';
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric'
-      });
-    } catch (error) {
-      return 'Invalid date';
-    }
+    if (!dateString) return 'Not scheduled';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
-  const formatTime = (dateString) => {
-    if (!dateString) return 'Time not set';
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Invalid time';
-      return date.toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      return 'Invalid time';
+  const formatCurrency = (amount) => {
+    if (!amount) return 'N/A';
+    
+    // Handle object with value property
+    if (typeof amount === 'object' && amount.value !== undefined) {
+      return `LKR ${amount.value.toLocaleString()}`;
     }
+    
+    // Handle number directly
+    if (typeof amount === 'number') {
+      return `LKR ${amount.toLocaleString()}`;
+    }
+    
+    return 'N/A';
   };
 
-  // ✅ Safe getter for customer/worker name
   const getPersonName = () => {
     if (workerView) {
-      // For worker view, show customer info
+      // Worker viewing customer info
       return booking.customerId?.fullName || 
              booking.customerId?.name || 
-             booking.customerName ||
+             booking.customerName || 
              'Customer';
     } else {
-      // For customer view, show worker info
+      // Customer viewing worker info
       return booking.workerId?.fullName || 
              booking.workerId?.name || 
-             booking.workerName ||
+             booking.workerName || 
              'Worker';
     }
   };
 
   const getPersonRole = () => {
-    return workerView ? 'Customer' : 'Worker';
+    return workerView ? 'Customer' : 'Service Provider';
   };
 
-  // ✅ Check if booking is active (accepted or in_progress)
-  const isActiveBooking = () => {
-    const status = booking.status?.toLowerCase();
-    return status === 'accepted' || 
-           status === 'in_progress' || 
-           status === 'in-progress' ||
-           status === 'inprogress';
+  const handleViewDetails = () => {
+    if (onViewDetails) {
+      onViewDetails();
+    }
   };
 
-  // Handle complete booking
+  const [isCompleting, setIsCompleting] = React.useState(false);
+
   const handleCompleteBooking = async () => {
-    if (!onCompleteBooking) {
-      console.warn('No onCompleteBooking handler provided');
+    if (!onCompleteBooking) return;
+    
+    setIsCompleting(true);
+    try {
+      await onCompleteBooking(booking._id);
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
+  // ✅ NEW: Message Worker handler
+  const handleMessageWorker = () => {
+    if (!booking?.workerId) {
+      alert('Worker information not available');
       return;
     }
 
-    if (window.confirm('Mark this job as completed?')) {
-      setIsCompleting(true);
-      try {
-        await onCompleteBooking(booking._id);
-      } catch (error) {
-        console.error('Error completing booking:', error);
-        alert('Failed to complete booking. Please try again.');
-      } finally {
-        setIsCompleting(false);
-      }
+    // Handle both object and string workerId
+    let workerId;
+    if (typeof booking.workerId === 'object') {
+      workerId = booking.workerId._id || booking.workerId.id;
+    } else {
+      workerId = booking.workerId;
     }
+
+    if (!workerId) {
+      console.error('❌ Could not extract worker ID:', booking.workerId);
+      alert('Unable to open chat. Worker information is incomplete.');
+      return;
+    }
+
+    console.log('💬 Opening chat with worker:', workerId);
+    navigate(`/customer/chat/${workerId}`);
   };
 
+  // ✅ NEW: Message Customer handler (for worker view)
+  const handleMessageCustomer = () => {
+    if (!booking?.customerId) {
+      alert('Customer information not available');
+      return;
+    }
+
+    // Handle both object and string customerId
+    let customerId;
+    if (typeof booking.customerId === 'object') {
+      customerId = booking.customerId._id || booking.customerId.id;
+    } else {
+      customerId = booking.customerId;
+    }
+
+    if (!customerId) {
+      console.error('❌ Could not extract customer ID:', booking.customerId);
+      alert('Unable to open chat. Customer information is incomplete.');
+      return;
+    }
+
+    console.log('💬 Opening chat with customer:', customerId);
+    navigate(`/worker/chat/${customerId}`);
+  };
+
+  // ✅ CRITICAL FIX: More robust worker detection
+  // Check if booking has ANY worker information - object, string, or even just workerName
+  const hasWorkerInfo = () => {
+    if (workerView) return false; // Don't show message worker button in worker view
+    
+    // Check for workerId (object or string)
+    if (booking.workerId) {
+      if (typeof booking.workerId === 'object') {
+        return !!(booking.workerId._id || booking.workerId.id);
+      }
+      return true; // It's a string ID
+    }
+    
+    // Fallback: Check if there's a worker name (means worker was assigned)
+    if (booking.workerName) {
+      return true;
+    }
+    
+    return false;
+  };
+
+  const hasWorker = hasWorkerInfo();
+
+  // Check if booking has a customer (for worker view)
+  const hasCustomer = workerView && booking.customerId;
+
+  // Compact view for lists
   if (compact) {
     return (
       <div 
-        className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow cursor-pointer"
-        onClick={() => onViewDetails && onViewDetails(booking)}
+        onClick={handleViewDetails}
+        className="bg-white rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer p-4 border border-gray-200"
       >
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3 flex-1">
-            <div className={`p-2 rounded-full ${statusConfig.bg}`}>
-              <Briefcase className={`w-5 h-5 ${statusConfig.text}`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <h4 className="font-semibold text-gray-900 truncate capitalize">
-                {booking.serviceType || 'Service Request'}
-              </h4>
-              <p className="text-sm text-gray-500 truncate">
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900 capitalize truncate">
+              {booking.serviceType || 'Service Request'}
+            </h3>
+            <p className="text-xs text-gray-600 mt-1 truncate">
+              {booking.problemDescription || booking.description || 'No description'}
+            </p>
+            <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
                 {booking.scheduledDate ? formatDate(booking.scheduledDate) : formatDate(booking.createdAt)}
-              </p>
+              </span>
             </div>
           </div>
-          <div className={`px-3 py-1 rounded-full ${statusConfig.bg} border ${statusConfig.border}`}>
-            <span className={`text-xs font-medium ${statusConfig.text}`}>
-              {statusConfig.label}
+          <div className={`px-3 py-1 rounded-full ${statusConfig[currentStatus]?.bg} border ${statusConfig[currentStatus]?.border}`}>
+            <span className={`text-xs font-medium ${statusConfig[currentStatus]?.text}`}>
+              {statusConfig[currentStatus]?.label}
             </span>
           </div>
         </div>
@@ -207,12 +263,12 @@ const BookingCard = ({ booking, onViewDetails, onCompleteBooking, compact = fals
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden">
       {/* Status Header */}
-      <div className={`${statusConfig.bg} border-b ${statusConfig.border} px-6 py-3`}>
+      <div className={`${statusConfig[currentStatus]?.bg} border-b ${statusConfig[currentStatus]?.border} px-6 py-3`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
-            <StatusIcon className={`w-5 h-5 ${statusConfig.text}`} />
-            <span className={`font-semibold ${statusConfig.text}`}>
-              {statusConfig.label}
+            <StatusIcon className={`w-5 h-5 ${statusConfig[currentStatus]?.text}`} />
+            <span className={`font-semibold ${statusConfig[currentStatus]?.text}`}>
+              {statusConfig[currentStatus]?.label}
             </span>
           </div>
           <span className="text-sm text-gray-600">
@@ -260,33 +316,29 @@ const BookingCard = ({ booking, onViewDetails, onCompleteBooking, compact = fals
                 {booking.scheduledDate ? formatDate(booking.scheduledDate) : formatDate(booking.serviceDate || booking.createdAt)}
               </p>
               <p className="text-sm text-gray-500">
-                {booking.scheduledDate ? formatTime(booking.scheduledDate) : 'Time not specified'}
+                {booking.scheduledDate ? 'Scheduled' : 'Requested'}
               </p>
             </div>
           </div>
 
           {/* Location */}
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0 mt-1">
-              <MapPin className="w-5 h-5 text-gray-400" />
+          {(booking.serviceLocation || booking.location) && (
+            <div className="flex items-start space-x-3">
+              <div className="flex-shrink-0 mt-1">
+                <MapPin className="w-5 h-5 text-gray-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900">
+                  {booking.serviceLocation?.city || booking.location?.city || 'Location'}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {booking.serviceLocation?.address || booking.location?.address || booking.issueLocation || 'Not specified'}
+                </p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">
-                {booking.serviceLocation?.address || 
-                 booking.issueLocation ||
-                 booking.location?.address ||
-                 'Location not specified'}
-              </p>
-              <p className="text-sm text-gray-500">
-                {booking.serviceLocation?.city || 
-                 booking.serviceLocation?.town ||
-                 booking.location?.city || 
-                 ''}
-              </p>
-            </div>
-          </div>
+          )}
 
-          {/* Price - Only show if available */}
+          {/* Price/Budget */}
           {(booking.totalAmount || booking.quote?.amount || booking.customerBudget) && (
             <div className="flex items-start space-x-3">
               <div className="flex-shrink-0 mt-1">
@@ -294,132 +346,83 @@ const BookingCard = ({ booking, onViewDetails, onCompleteBooking, compact = fals
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-900">
-                  LKR {(booking.totalAmount || booking.quote?.amount || booking.customerBudget?.max || 0).toLocaleString()}
+                  {booking.totalAmount 
+                    ? formatCurrency(booking.totalAmount)
+                    : booking.quote?.amount 
+                      ? formatCurrency(booking.quote.amount)
+                      : booking.customerBudget 
+                        ? `${formatCurrency(booking.customerBudget.min)} - ${formatCurrency(booking.customerBudget.max)}`
+                        : 'N/A'}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {booking.paymentStatus ? booking.paymentStatus.replace('_', ' ') : 'pending'}
+                  {booking.totalAmount ? 'Total Amount' : booking.quote?.amount ? 'Quoted Amount' : 'Budget Range'}
                 </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Problem Images */}
-        {booking.problemImages && booking.problemImages.length > 0 && (
-          <div className="mb-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Problem Images:</p>
-            <div className="flex space-x-2 overflow-x-auto">
-              {booking.problemImages.slice(0, 3).map((image, index) => {
-                // Handle both URL strings and objects with url property
-                const imageUrl = typeof image === 'string' ? image : image?.url;
-                if (!imageUrl) return null;
-                
-                return (
-                  <img
-                    key={index}
-                    src={imageUrl}
-                    alt={`Problem ${index + 1}`}
-                    className="w-20 h-20 object-cover rounded-md border border-gray-200"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                    }}
-                  />
-                );
-              })}
-              {booking.problemImages.length > 3 && (
-                <div className="w-20 h-20 bg-gray-100 rounded-md border border-gray-200 flex items-center justify-center">
-                  <span className="text-sm text-gray-600 font-medium">
-                    +{booking.problemImages.length - 3}
-                  </span>
-                </div>
-              )}
-            </div>
+        {/* Quote Details */}
+        {booking.quote && booking.quote.details && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">Quote Details:</span> {booking.quote.details}
+            </p>
           </div>
         )}
 
-        {/* Quote Info */}
-        {booking.quote && booking.quote.amount && (
-          <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-md">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-indigo-900">Quote Provided</p>
-                <p className="text-lg font-bold text-indigo-700">
-                  LKR {booking.quote.amount.toLocaleString()}
-                </p>
-                {booking.quote.details && (
-                  <p className="text-sm text-indigo-600 mt-1">{booking.quote.details}</p>
-                )}
-              </div>
-              {booking.quote.status === 'accepted' && (
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              )}
-            </div>
-          </div>
-        )}
+        {/* Action Buttons */}
+        <div className="flex flex-wrap gap-3">
+          {/* View Details Button */}
+          <button
+            onClick={handleViewDetails}
+            className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            <Eye className="w-5 h-5" />
+            View Details
+          </button>
 
-        {/* Progress Updates */}
-        {booking.workProgress && booking.workProgress.length > 0 && (
-          <div className="mb-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Latest Update:</p>
-            <div className="p-3 bg-gray-50 rounded-md border border-gray-200">
-              <p className="text-sm text-gray-900">
-                {booking.workProgress[booking.workProgress.length - 1].note || 'Update recorded'}
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {formatDate(booking.workProgress[booking.workProgress.length - 1].timestamp)}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex flex-col space-y-3 pt-4 border-t border-gray-200">
-          {/* Primary Action Buttons */}
-          <div className="flex space-x-3">
+          {/* ✅ FIXED: Message Worker Button - Shows for ALL bookings with worker */}
+          {hasWorker && (
             <button
-              onClick={() => onViewDetails && onViewDetails(booking)}
-              className="flex-1 flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+              onClick={handleMessageWorker}
+              className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
-              <span className="mr-2">View Details</span>
-              <ArrowRight className="w-4 h-4" />
+              <MessageCircle className="w-5 h-5" />
+              Message Worker
             </button>
-            
-            {/* Show Accept/Decline for pending bookings in worker view */}
-            {booking.status === 'pending' && workerView && (
-              <>
-                <button
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                >
-                  Accept
-                </button>
-                <button
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-                >
-                  Decline
-                </button>
-              </>
-            )}
-          </div>
+          )}
 
-          {/* ✅ NEW: Complete Button for Active Bookings in Worker View */}
-          {workerView && isActiveBooking() && (
+          {/* ✅ NEW: Message Customer Button (Worker View) */}
+          {hasCustomer && (
+            <button
+              onClick={handleMessageCustomer}
+              className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+            >
+              <MessageCircle className="w-5 h-5" />
+              Message Customer
+            </button>
+          )}
+
+          {/* Complete Booking Button (Worker View - In Progress Only) */}
+          {workerView && booking.status === 'in_progress' && onCompleteBooking && (
             <button
               onClick={handleCompleteBooking}
               disabled={isCompleting}
-              className={`w-full flex items-center justify-center px-4 py-3 rounded-md font-semibold transition-colors ${
-                isCompleting
+              className={`flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                isCompleting 
                   ? 'bg-gray-400 cursor-not-allowed'
                   : 'bg-green-600 hover:bg-green-700 text-white'
               }`}
             >
               {isCompleting ? (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                   Completing...
                 </>
               ) : (
                 <>
-                  <Check className="w-5 h-5 mr-2" />
+                  <Check className="w-5 h-5" />
                   Mark as Completed
                 </>
               )}
