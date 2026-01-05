@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle, MessageCircle } from 'lucide-react';
+import AvailabilityToggle from '../../components/worker/AvailabilityToggle';
 
 /**
- * Worker Dashboard Component - UPDATED WITH MESSAGING
+ * Worker Dashboard Component - UPDATED WITH AVAILABILITY + VERIFICATION TOGGLE
  * ✅ Active Jobs card is clickable
  * ✅ View All Jobs button works correctly
- * ✅ NEW: Messages button added to Quick Actions
- * ✅ All navigation paths maintained
+ * ✅ Messages button in Quick Actions
+ * ✅ NEW: Availability toggle that also controls verification status
  */
 const WorkerDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [profileCompletion, setProfileCompletion] = useState(0);
+  const [workerProfile, setWorkerProfile] = useState(null);
   const [dashboardData, setDashboardData] = useState({
     stats: {
       pendingRequests: 0,
@@ -55,7 +57,7 @@ const WorkerDashboard = () => {
       const token = localStorage.getItem('fixmate_auth_token');
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
       
-      // Fetch worker profile to calculate completion
+      // Fetch worker profile to get availability and verification status
       try {
         const profileResponse = await fetch(`${API_BASE_URL}/workers/profile`, {
           headers: {
@@ -67,23 +69,21 @@ const WorkerDashboard = () => {
         if (profileResponse.ok) {
           const profileData = await profileResponse.json();
           if (profileData.success && profileData.data) {
+            setWorkerProfile(profileData.data);
             const completion = calculateProfileCompletion(profileData.data);
-            console.log('📊 Calculated profile completion:', completion + '%');
+            console.log('📊 Worker profile loaded:', {
+              completion: completion + '%',
+              availability: profileData.data.availability,
+              isVerified: profileData.data.isVerified
+            });
             setProfileCompletion(completion);
           }
         }
       } catch (profileError) {
         console.error('Error fetching profile for completion:', profileError);
-        // Fallback: try to calculate from localStorage
-        const userStr = localStorage.getItem('fixmate_user');
-        if (userStr) {
-          const user = JSON.parse(userStr);
-          const completion = calculateProfileCompletion(user);
-          setProfileCompletion(completion);
-        }
       }
 
-      // Try to fetch dashboard stats
+      // Fetch dashboard stats
       try {
         const dashboardResponse = await fetch(`${API_BASE_URL}/workers/dashboard`, {
           headers: {
@@ -122,6 +122,20 @@ const WorkerDashboard = () => {
     }
   };
 
+  const handleAvailabilityToggle = (newAvailability, newVerified) => {
+    console.log('🔄 Availability and verification toggled:', {
+      availability: newAvailability,
+      isVerified: newVerified
+    });
+    
+    // Update local worker profile state
+    setWorkerProfile(prev => ({
+      ...prev,
+      availability: newAvailability,
+      isVerified: newVerified
+    }));
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen bg-gray-50">
@@ -157,6 +171,15 @@ const WorkerDashboard = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* ✅ NEW: Availability + Verification Toggle Section */}
+        <div className="mb-6">
+          <AvailabilityToggle 
+            initialAvailability={workerProfile?.availability ?? true}
+            initialVerified={workerProfile?.isVerified ?? false}
+            onToggle={handleAvailabilityToggle}
+          />
+        </div>
+
         {/* Profile Completion Alert */}
         {profileCompletion < 100 && (
           <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6 rounded-lg">
@@ -190,9 +213,9 @@ const WorkerDashboard = () => {
           </div>
         )}
 
-        {/* Stats Grid - ✅ FIXED: Active Jobs now clickable */}
+        {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-          {/* Pending Requests - ✅ Clickable */}
+          {/* Pending Requests - Clickable */}
           <div 
             onClick={() => navigate('/worker/requests')}
             className="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200"
@@ -215,7 +238,7 @@ const WorkerDashboard = () => {
             </div>
           </div>
 
-          {/* Active Jobs - ✅ NOW CLICKABLE - navigates to /worker/jobs with active filter */}
+          {/* Active Jobs - Clickable */}
           <div 
             onClick={() => navigate('/worker/jobs?filter=active')}
             className="bg-white rounded-lg shadow p-6 cursor-pointer hover:shadow-lg hover:scale-105 transition-all duration-200"
@@ -269,7 +292,7 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Recent Booking Requests - ✅ Clickable */}
+        {/* Recent Booking Requests */}
         <div className="bg-white rounded-lg shadow mb-6">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Recent Booking Requests</h3>
@@ -311,7 +334,7 @@ const WorkerDashboard = () => {
           </div>
         </div>
 
-        {/* Quick Actions - ✅ UPDATED: Added Messages button */}
+        {/* Quick Actions */}
         <div className="bg-white rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">Quick Actions</h3>
@@ -339,7 +362,6 @@ const WorkerDashboard = () => {
                 <Briefcase className="w-5 h-5" />
                 View All Jobs
               </button>
-              {/* ✅ NEW: Messages Button */}
               <button
                 onClick={() => navigate('/worker/messages')}
                 className="flex items-center justify-center gap-2 bg-blue-600 text-white px-4 py-3 rounded-lg hover:bg-blue-700 transition-colors"
