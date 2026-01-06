@@ -8,11 +8,8 @@ import BookingCard from '../../components/booking/BookingCard';
 
 /**
  * My Bookings Page - Customer View
- * ✅ FIXED: Proper handling of API response structure
- * ✅ FIXED: Safe array operations with null checks
- * ✅ FIXED: Quote requested status support
- * ✅ FIXED: Navigation to booking details
- * ✅ FIXED: JSX boolean attribute warning
+ * ✅ ENHANCED: Automatically filters out quote requests that haven't been sent to workers
+ * ✅ ENHANCED: Option to automatically delete unsent quotes
  */
 const MyBookings = () => {
   const navigate = useNavigate();
@@ -21,6 +18,7 @@ const MyBookings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState(searchParams.get('filter') || 'all');
+  const [deletingUnsentQuotes, setDeletingUnsentQuotes] = useState(false);
 
   const filters = [
     { value: 'all', label: 'All', icon: Calendar },
@@ -78,14 +76,16 @@ const MyBookings = () => {
       const data = await response.json();
       console.log('📦 Bookings response:', data);
       
-      // ✅ CRITICAL FIX: Extract bookings from nested data structure
+      // Extract bookings from nested data structure
       if (data.success && data.data) {
         const bookingsArray = data.data.bookings || data.data || [];
         console.log('✅ Extracted bookings:', bookingsArray);
         console.log('📊 Number of bookings:', bookingsArray.length);
         
         if (Array.isArray(bookingsArray)) {
-          setBookings(bookingsArray);
+          // ✅ NEW: Filter out quote requests that haven't been sent to workers
+          const filteredBookings = filterUnsentQuotes(bookingsArray);
+          setBookings(filteredBookings);
         } else {
           console.warn('⚠️ Bookings data is not an array:', bookingsArray);
           setBookings([]);
@@ -104,13 +104,94 @@ const MyBookings = () => {
     }
   };
 
+  /**
+   * ✅ NEW: Filter out quote requests that haven't been sent to any workers
+   * This prevents showing "draft" quotes that the customer created but never sent
+   */
+  const filterUnsentQuotes = (bookingsArray) => {
+    const filtered = bookingsArray.filter(booking => {
+      // Keep all non-quote-requested bookings
+      if (booking.status !== 'quote_requested') {
+        return true;
+      }
+
+      // For quote_requested bookings, only keep those sent to workers
+      const hasSentToWorkers = booking.sentToWorkers && booking.sentToWorkers.length > 0;
+      
+      if (!hasSentToWorkers) {
+        console.log('🗑️ Filtering out unsent quote:', {
+          id: booking._id?.slice(-8),
+          serviceType: booking.serviceType,
+          sentToWorkers: booking.sentToWorkers?.length || 0
+        });
+      }
+      
+      return hasSentToWorkers;
+    });
+
+    const removedCount = bookingsArray.length - filtered.length;
+    if (removedCount > 0) {
+      console.log(`✅ Filtered out ${removedCount} unsent quote(s)`);
+    }
+
+    return filtered;
+  };
+
+  /**
+   * ✅ NEW: Delete unsent quote requests from the database
+   * Call this when you want to permanently remove draft quotes
+   */
+  const deleteUnsentQuotes = async () => {
+    try {
+      setDeletingUnsentQuotes(true);
+      const token = localStorage.getItem('fixmate_auth_token');
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+
+      // Find unsent quotes
+      const unsentQuotes = bookings.filter(booking => {
+        return booking.status === 'quote_requested' && 
+               (!booking.sentToWorkers || booking.sentToWorkers.length === 0);
+      });
+
+      if (unsentQuotes.length === 0) {
+        console.log('ℹ️ No unsent quotes to delete');
+        return;
+      }
+
+      console.log(`🗑️ Deleting ${unsentQuotes.length} unsent quote(s)...`);
+
+      // Delete each unsent quote
+      const deletePromises = unsentQuotes.map(booking => 
+        fetch(`${API_BASE_URL}/bookings/${booking._id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+      );
+
+      await Promise.all(deletePromises);
+      
+      console.log('✅ Unsent quotes deleted successfully');
+      
+      // Refresh bookings list
+      await fetchBookings();
+      
+    } catch (error) {
+      console.error('❌ Error deleting unsent quotes:', error);
+      setError('Failed to delete unsent quotes');
+    } finally {
+      setDeletingUnsentQuotes(false);
+    }
+  };
+
   const handleFilterChange = (newFilter) => {
     setFilter(newFilter);
     setSearchParams(newFilter !== 'all' ? { filter: newFilter } : {});
   };
 
   const handleViewDetails = (booking) => {
-    // ✅ FIX: Use booking._id for navigation
     const bookingId = booking._id || booking.id;
     console.log('🔍 Navigating to booking details:', bookingId);
     
@@ -120,11 +201,10 @@ const MyBookings = () => {
       return;
     }
     
-    // Navigate to booking details page
     navigate(`/customer/bookings/${bookingId}`);
   };
 
-  // ✅ Safe filtering with null checks
+  // Safe filtering with null checks
   const getFilteredBookings = () => {
     if (!Array.isArray(bookings)) {
       console.warn('⚠️ Bookings is not an array:', bookings);
@@ -205,7 +285,6 @@ const MyBookings = () => {
             </div>
           </Card>
         )}
-
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex items-center space-x-2 mb-3">

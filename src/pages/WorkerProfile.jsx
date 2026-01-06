@@ -17,6 +17,12 @@ import {
 } from 'lucide-react';
 import apiService from '../services/apiService';
 
+/**
+ * Worker Profile Component - FIXED VERSION
+ * ✅ FIXED: handleContact() now properly extracts userId for chat navigation
+ * ✅ FIXED: Handles both object and string formats for worker.userId
+ * ✅ FIXED: Added comprehensive error handling and logging
+ */
 const WorkerProfile = () => {
   const { workerId } = useParams();
   const location = useLocation();
@@ -210,9 +216,52 @@ const WorkerProfile = () => {
     }
   };
 
+  /**
+   * ✅ FIXED: Handle Send Message button click
+   * Properly extracts worker's userId for chat navigation
+   */
   const handleContact = () => {
+    console.log('💬 Send Message clicked');
+    console.log('📊 Worker data:', worker);
+    
+    if (!worker) {
+      alert('Worker information not available. Please try again.');
+      return;
+    }
+
+    // ✅ CRITICAL: Extract userId - handle both object and string formats
+    let chatUserId;
+    
+    if (worker.userId) {
+      if (typeof worker.userId === 'object' && worker.userId !== null) {
+        // userId is an object, extract _id or id
+        chatUserId = worker.userId._id || worker.userId.id;
+        console.log('✅ Extracted userId from object:', chatUserId);
+      } else if (typeof worker.userId === 'string') {
+        // userId is already a string
+        chatUserId = worker.userId;
+        console.log('✅ Using userId string directly:', chatUserId);
+      }
+    }
+
+    // Fallback: try using workerId if userId extraction failed
+    if (!chatUserId) {
+      console.warn('⚠️ Could not extract userId, trying workerId as fallback');
+      chatUserId = workerId;
+    }
+
+    if (!chatUserId) {
+      console.error('❌ No valid user ID found for chat');
+      alert('Unable to open chat. User information is incomplete.');
+      return;
+    }
+
+    console.log('✅ Navigating to chat with userId:', chatUserId);
+    const chatPath = `/customer/chat/${chatUserId}`;
+    console.log('🔗 Chat path:', chatPath);
+    
     // Navigate to chat page
-    navigate(`/customer/chat/${workerId}`);
+    navigate(chatPath);
   };
 
   const getInitials = (name) => {
@@ -579,6 +628,7 @@ const WorkerProfile = () => {
                 )}
               </div>
 
+              {/* ✅ FIXED: Send Message button with proper onClick handler */}
               <button
                 onClick={handleContact}
                 className="w-full mt-4 flex items-center justify-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"

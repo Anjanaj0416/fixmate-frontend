@@ -6,15 +6,18 @@ import {
   Image as ImageIcon,
   Phone,
   Video,
-  MoreVertical
+  MoreVertical,
+  RefreshCw
 } from 'lucide-react';
+import { auth } from '../config/firebase';
 
 const API_BASE_URL = 'http://localhost:5001';
 
 /**
- * CustomerChatPage Component - FINAL FIXED VERSION
- * ✅ Uses correct storage keys: 'user' and 'fixmate_user'
- * ✅ Proper message alignment based on sender ID
+ * CustomerChatPage Component - WITH TOKEN REFRESH FIX
+ * ✅ Automatic token refresh on mount
+ * ✅ Manual refresh button for expired tokens
+ * ✅ Proper error handling and user feedback
  */
 const CustomerChatPage = () => {
   const { workerId } = useParams();
@@ -31,11 +34,44 @@ const CustomerChatPage = () => {
   const [otherUser, setOtherUser] = useState(null);
   const [selectedImage, setSelectedImage] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  const [refreshingAuth, setRefreshingAuth] = useState(false);
+
+  // ✅ NEW: Refresh Firebase auth token
+  const refreshAuthToken = async () => {
+    try {
+      setRefreshingAuth(true);
+      console.log('🔄 Refreshing auth token...');
+      
+      const user = auth.currentUser;
+      
+      if (!user) {
+        console.error('❌ No user logged in');
+        navigate('/login');
+        return false;
+      }
+
+      // Force token refresh
+      const token = await user.getIdToken(true);
+      
+      // Save to all storage locations
+      localStorage.setItem('fixmate_auth_token', token);
+      localStorage.setItem('authToken', token);
+      sessionStorage.setItem('fixmate_auth_token', token);
+      sessionStorage.setItem('authToken', token);
+      
+      console.log('✅ Auth token refreshed successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to refresh token:', error);
+      return false;
+    } finally {
+      setRefreshingAuth(false);
+    }
+  };
 
   // ✅ FIXED: Get current user ID using correct storage keys
   const getCurrentUserId = () => {
     try {
-      // Try all possible storage locations
       const userStr = sessionStorage.getItem('user') || 
                      localStorage.getItem('user') ||
                      sessionStorage.getItem('fixmate_user') ||
@@ -104,18 +140,11 @@ const CustomerChatPage = () => {
 
     const isMatch = senderIdStr === currentUserIdStr;
     
-    console.log('🔍 Message Ownership:', {
-      currentUser: currentUserIdStr,
-      sender: senderIdStr,
-      isMatch: isMatch,
-      message: message.message?.substring(0, 20)
-    });
-
     return isMatch;
   };
 
-  // Load messages
-  const loadMessages = async () => {
+  // Load messages with token refresh
+  const loadMessages = async (retryCount = 0) => {
     try {
       const token = getToken();
       if (!token) {
@@ -132,10 +161,20 @@ const CustomerChatPage = () => {
         }
       });
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      // ✅ NEW: Handle 401 by refreshing token
+      if (response.status === 401 && retryCount === 0) {
+        console.log('🔄 Token expired, attempting refresh...');
+        const refreshed = await refreshAuthToken();
+        
+        if (refreshed) {
+          console.log('✅ Token refreshed, retrying request...');
+          return await loadMessages(1); // Retry once
+        } else {
           throw new Error('Session expired. Please login again.');
         }
+      }
+
+      if (!response.ok) {
         throw new Error(`Failed to load messages: ${response.status}`);
       }
 
@@ -176,6 +215,10 @@ const CustomerChatPage = () => {
 
         await markMessagesAsRead();
       }
+      
+      // Clear error if successful
+      setError(null);
+      
     } catch (error) {
       console.error('❌ Error loading messages:', error);
       setError(error.message || 'Failed to load messages');
@@ -242,7 +285,7 @@ const CustomerChatPage = () => {
     }
   };
 
-  // Send message
+  // Send message with token refresh
   const handleSendMessage = async (e) => {
     e.preventDefault();
     
@@ -277,10 +320,21 @@ const CustomerChatPage = () => {
         body: JSON.stringify(messageData)
       });
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      // ✅ NEW: Handle 401 by refreshing token
+      if (response.status === 401) {
+        console.log('🔄 Token expired, attempting refresh...');
+        const refreshed = await refreshAuthToken();
+        
+        if (refreshed) {
+          console.log('✅ Token refreshed, retrying send...');
+          // Retry sending
+          return await handleSendMessage(e);
+        } else {
           throw new Error('Session expired. Please login again.');
         }
+      }
+
+      if (!response.ok) {
         throw new Error(`Failed to send message: ${response.status}`);
       }
 
@@ -303,6 +357,20 @@ const CustomerChatPage = () => {
       setError(error.message || 'Failed to send message');
     } finally {
       setSending(false);
+    }
+  };
+
+  // ✅ NEW: Manual refresh handler
+  const handleManualRefresh = async () => {
+    console.log('🔄 Manual refresh triggered');
+    setError(null);
+    const refreshed = await refreshAuthToken();
+    
+    if (refreshed) {
+      setLoading(true);
+      await loadMessages();
+    } else {
+      setError('Failed to refresh session. Please login again.');
     }
   };
 
@@ -384,13 +452,20 @@ const CustomerChatPage = () => {
     alert('Video calling feature coming soon!');
   };
 
-  // Load on mount
+  // ✅ NEW: Load with token refresh on mount
   useEffect(() => {
     loadCurrentUser();
-    loadMessages();
+    
+    // Refresh token immediately on mount
+    refreshAuthToken().then(() => {
+      loadMessages();
+    });
     
     // Auto-refresh every 5 seconds
-    const interval = setInterval(loadMessages, 5000);
+    const interval = setInterval(() => {
+      loadMessages();
+    }, 5000);
+    
     return () => clearInterval(interval);
   }, [workerId]);
 
@@ -484,15 +559,35 @@ const CustomerChatPage = () => {
       {/* Messages Container */}
       <div className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 py-6">
+          {/* ✅ NEW: Enhanced error display with refresh button */}
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-              <p className="text-red-800 font-medium">Error: {error}</p>
-              <button
-                onClick={loadMessages}
-                className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium"
-              >
-                Try again
-              </button>
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-red-800 font-medium">Error: {error}</p>
+                  {error.includes('Session expired') && (
+                    <p className="text-sm text-red-600 mt-1">
+                      Your session has expired. Click refresh to continue.
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleManualRefresh}
+                    disabled={refreshingAuth}
+                    className="flex items-center gap-1 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${refreshingAuth ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </button>
+                  <button
+                    onClick={loadMessages}
+                    className="px-3 py-1 border border-red-300 text-red-600 rounded text-sm hover:bg-red-50"
+                  >
+                    Retry
+                  </button>
+                </div>
+              </div>
             </div>
           )}
 

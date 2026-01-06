@@ -13,14 +13,15 @@ import {
   Phone,
   MessageCircle,
   Eye,
-  Check
+  Check,
+  Users
 } from 'lucide-react';
 
 /**
- * Booking Card Component - FINAL FIX
- * ✅ FIXED: Message Worker button now shows for ALL bookings with ANY worker data
- * Displays booking information in a card format
- * Supports both customer and worker views
+ * Booking Card Component - FINAL VERSION
+ * ✅ Shows "Message Worker" for bookings with assigned workers
+ * ✅ Shows "Message Workers" (plural) for quote requests sent to multiple workers
+ * ✅ Proper handling of sentToWorkers array
  */
 const BookingCard = ({ 
   booking, 
@@ -100,12 +101,10 @@ const BookingCard = ({
   const formatCurrency = (amount) => {
     if (!amount) return 'N/A';
     
-    // Handle object with value property
     if (typeof amount === 'object' && amount.value !== undefined) {
       return `LKR ${amount.value.toLocaleString()}`;
     }
     
-    // Handle number directly
     if (typeof amount === 'number') {
       return `LKR ${amount.toLocaleString()}`;
     }
@@ -115,13 +114,11 @@ const BookingCard = ({
 
   const getPersonName = () => {
     if (workerView) {
-      // Worker viewing customer info
       return booking.customerId?.fullName || 
              booking.customerId?.name || 
              booking.customerName || 
              'Customer';
     } else {
-      // Customer viewing worker info
       return booking.workerId?.fullName || 
              booking.workerId?.name || 
              booking.workerName || 
@@ -152,39 +149,46 @@ const BookingCard = ({
     }
   };
 
-  // ✅ NEW: Message Worker handler
+  // ✅ ENHANCED: Message Worker handler with sentToWorkers support
   const handleMessageWorker = () => {
-    if (!booking?.workerId) {
-      alert('Worker information not available');
+    console.log('💬 handleMessageWorker called');
+    
+    // First, try to get assigned workerId
+    if (booking?.workerId) {
+      let workerId;
+      if (typeof booking.workerId === 'object') {
+        workerId = booking.workerId._id || booking.workerId.id;
+      } else {
+        workerId = booking.workerId;
+      }
+
+      if (workerId) {
+        console.log('✅ Navigating to assigned worker:', workerId);
+        navigate(`/customer/chat/${workerId}`);
+        return;
+      }
+    }
+
+    // ✅ NEW: If no assigned worker, but quote sent to workers, use first one
+    if (booking?.sentToWorkers && booking.sentToWorkers.length > 0) {
+      const workerId = booking.sentToWorkers[0];
+      console.log('✅ Navigating to first worker from sentToWorkers:', workerId);
+      navigate(`/customer/chat/${workerId}`);
       return;
     }
 
-    // Handle both object and string workerId
-    let workerId;
-    if (typeof booking.workerId === 'object') {
-      workerId = booking.workerId._id || booking.workerId.id;
-    } else {
-      workerId = booking.workerId;
-    }
-
-    if (!workerId) {
-      console.error('❌ Could not extract worker ID:', booking.workerId);
-      alert('Unable to open chat. Worker information is incomplete.');
-      return;
-    }
-
-    console.log('💬 Opening chat with worker:', workerId);
-    navigate(`/customer/chat/${workerId}`);
+    // No worker found
+    console.error('❌ No worker found for messaging');
+    alert('Worker information not available');
   };
 
-  // ✅ NEW: Message Customer handler (for worker view)
+  // Message Customer handler (for worker view)
   const handleMessageCustomer = () => {
     if (!booking?.customerId) {
       alert('Customer information not available');
       return;
     }
 
-    // Handle both object and string customerId
     let customerId;
     if (typeof booking.customerId === 'object') {
       customerId = booking.customerId._id || booking.customerId.id;
@@ -202,21 +206,25 @@ const BookingCard = ({
     navigate(`/worker/chat/${customerId}`);
   };
 
-  // ✅ CRITICAL FIX: More robust worker detection
-  // Check if booking has ANY worker information - object, string, or even just workerName
+  // ✅ FINAL: Comprehensive worker detection
   const hasWorkerInfo = () => {
-    if (workerView) return false; // Don't show message worker button in worker view
+    if (workerView) return false;
     
-    // Check for workerId (object or string)
+    // Check for assigned workerId (accepted/in-progress/completed bookings)
     if (booking.workerId) {
       if (typeof booking.workerId === 'object') {
         return !!(booking.workerId._id || booking.workerId.id);
       }
-      return true; // It's a string ID
+      return true;
     }
     
-    // Fallback: Check if there's a worker name (means worker was assigned)
+    // Check for workerName (fallback)
     if (booking.workerName) {
+      return true;
+    }
+
+    // ✅ Check if quote was sent to workers (quote_requested status)
+    if (booking.sentToWorkers && booking.sentToWorkers.length > 0) {
       return true;
     }
     
@@ -224,11 +232,29 @@ const BookingCard = ({
   };
 
   const hasWorker = hasWorkerInfo();
-
-  // Check if booking has a customer (for worker view)
   const hasCustomer = workerView && booking.customerId;
 
-  // Compact view for lists
+  // Get message button label
+  const getMessageButtonLabel = () => {
+    // If worker is assigned, show "Message Worker"
+    if (booking.workerId) {
+      return 'Message Worker';
+    }
+    
+    // If quote sent to multiple workers, show count
+    if (booking.sentToWorkers && booking.sentToWorkers.length > 1) {
+      return `Message Workers (${booking.sentToWorkers.length})`;
+    }
+    
+    // If quote sent to one worker
+    if (booking.sentToWorkers && booking.sentToWorkers.length === 1) {
+      return 'Message Worker';
+    }
+    
+    return 'Message Worker';
+  };
+
+  // Compact view
   if (compact) {
     return (
       <div 
@@ -382,18 +408,22 @@ const BookingCard = ({
             View Details
           </button>
 
-          {/* ✅ FIXED: Message Worker Button - Shows for ALL bookings with worker */}
+          {/* ✅ FINAL: Message Worker Button - Shows when worker(s) available */}
           {hasWorker && (
             <button
               onClick={handleMessageWorker}
               className="flex-1 min-w-[140px] flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
-              <MessageCircle className="w-5 h-5" />
-              Message Worker
+              {booking.sentToWorkers && booking.sentToWorkers.length > 1 ? (
+                <Users className="w-5 h-5" />
+              ) : (
+                <MessageCircle className="w-5 h-5" />
+              )}
+              <span>{getMessageButtonLabel()}</span>
             </button>
           )}
 
-          {/* ✅ NEW: Message Customer Button (Worker View) */}
+          {/* Message Customer Button (Worker View) */}
           {hasCustomer && (
             <button
               onClick={handleMessageCustomer}
@@ -453,16 +483,11 @@ BookingCard.propTypes = {
     description: PropTypes.string,
     scheduledDate: PropTypes.string,
     serviceDate: PropTypes.string,
-    customerId: PropTypes.oneOfType([
-      PropTypes.object,
-      PropTypes.string
-    ]),
-    workerId: PropTypes.oneOfType([
-      PropTypes.object,
-      PropTypes.string
-    ]),
+    customerId: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
+    workerId: PropTypes.oneOfType([PropTypes.object, PropTypes.string]),
     customerName: PropTypes.string,
     workerName: PropTypes.string,
+    sentToWorkers: PropTypes.array,
     serviceLocation: PropTypes.shape({
       address: PropTypes.string,
       city: PropTypes.string,
