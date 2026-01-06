@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
+  FileText,
   MapPin,
   Calendar,
   Clock,
@@ -9,25 +10,19 @@ import {
   Phone,
   MessageCircle,
   DollarSign,
-  FileText,
-  Image as ImageIcon,
+  AlertCircle,
+  Loader2,
   CheckCircle,
   XCircle,
-  AlertCircle,
-  Loader2
+  Timer
 } from 'lucide-react';
-import Button from '../../components/common/Button';
 import Card from '../../components/common/Card';
 import Spinner from '../../components/common/Spinner';
 
-/**
- * Booking Details Page - Customer View
- * FIXED: Removed duplication, message button for all bookings, proper worker ID handling
- */
 const BookingDetails = () => {
   const { bookingId } = useParams();
   const navigate = useNavigate();
-
+  
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -48,7 +43,7 @@ const BookingDetails = () => {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
       if (!token) {
-        throw new Error('Authentication token not found. Please login again.');
+        throw new Error('No authentication token found. Please login again.');
       }
 
       console.log('📡 Fetching booking details for:', bookingId);
@@ -99,7 +94,7 @@ const BookingDetails = () => {
       return;
     }
 
-    // ✅ FIXED: Handle both object and string workerId
+    // Handle both object and string workerId
     let workerId;
     if (typeof booking.workerId === 'object') {
       workerId = booking.workerId._id || booking.workerId.id;
@@ -127,7 +122,7 @@ const BookingDetails = () => {
   };
 
   const handleCancelBooking = async () => {
-    if (!confirm('Are you sure you want to cancel this booking?')) {
+    if (!window.confirm('Are you sure you want to cancel this booking?')) {
       return;
     }
 
@@ -136,26 +131,39 @@ const BookingDetails = () => {
       const token = localStorage.getItem('fixmate_auth_token');
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
 
+      console.log('🗑️ Attempting to cancel booking:', bookingId);
+
       const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/cancel`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          reason: 'Cancelled by customer'
+        })
       });
 
+      console.log('📡 Cancel response status:', response.status);
+
       if (!response.ok) {
-        throw new Error('Failed to cancel booking');
+        const errorData = await response.json();
+        console.error('❌ Cancel error:', errorData);
+        throw new Error(errorData.message || 'Failed to cancel booking');
       }
 
       const data = await response.json();
+      console.log('✅ Cancel response:', data);
+      
       if (data.success) {
         alert('Booking cancelled successfully');
         fetchBookingDetails(); // Refresh booking data
+      } else {
+        throw new Error(data.message || 'Failed to cancel booking');
       }
     } catch (error) {
-      console.error('Error cancelling booking:', error);
-      alert('Failed to cancel booking. Please try again.');
+      console.error('❌ Error cancelling booking:', error);
+      alert(error.message || 'Failed to cancel booking. Please try again.');
     } finally {
       setActionLoading(false);
     }
@@ -190,7 +198,7 @@ const BookingDetails = () => {
         color: 'text-yellow-700',
         bgColor: 'bg-yellow-100',
         borderColor: 'border-yellow-300',
-        icon: Clock
+        icon: Timer
       },
       pending: {
         label: 'Pending',
@@ -208,9 +216,9 @@ const BookingDetails = () => {
       },
       in_progress: {
         label: 'In Progress',
-        color: 'text-indigo-700',
-        bgColor: 'bg-indigo-100',
-        borderColor: 'border-indigo-300',
+        color: 'text-purple-700',
+        bgColor: 'bg-purple-100',
+        borderColor: 'border-purple-300',
         icon: Clock
       },
       completed: {
@@ -235,44 +243,55 @@ const BookingDetails = () => {
         icon: XCircle
       }
     };
-
     return configs[status] || configs.pending;
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Spinner size="lg" />
+        <div className="text-center">
+          <Spinner size="lg" />
+          <p className="mt-4 text-gray-600">Loading booking details...</p>
+        </div>
       </div>
     );
   }
 
+  // Error state
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Card className="max-w-md p-6">
-          <div className="text-center">
+        <div className="text-center max-w-md">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
             <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Booking</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error</h2>
             <p className="text-gray-600 mb-4">{error}</p>
-            <Button onClick={handleBack}>Back to My Bookings</Button>
+            <button
+              onClick={handleBack}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            >
+              Back to Bookings
+            </button>
           </div>
-        </Card>
+        </div>
       </div>
     );
   }
 
+  // No booking data
   if (!booking) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Card className="max-w-md p-6">
-          <div className="text-center">
-            <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Booking Not Found</h2>
-            <p className="text-gray-600 mb-4">The booking you're looking for doesn't exist.</p>
-            <Button onClick={handleBack}>Back to My Bookings</Button>
-          </div>
-        </Card>
+        <div className="text-center">
+          <p className="text-gray-600">No booking data available</p>
+          <button
+            onClick={handleBack}
+            className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+          >
+            Back to Bookings
+          </button>
+        </div>
       </div>
     );
   }
@@ -280,9 +299,9 @@ const BookingDetails = () => {
   const statusConfig = getStatusConfig(booking.status);
   const StatusIcon = statusConfig.icon;
 
-  // ✅ Check if worker information exists
+  // Check if worker information exists
   const hasWorkerInfo = booking.workerId && (
-    typeof booking.workerId === 'object' 
+    typeof booking.workerId === 'object'
       ? (booking.workerId._id || booking.workerId.id)
       : booking.workerId
   );
@@ -327,7 +346,7 @@ const BookingDetails = () => {
                 <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm text-gray-500">Service Type</p>
-                  <p className="font-medium text-gray-900">{booking.serviceType || 'N/A'}</p>
+                  <p className="font-medium text-gray-900 capitalize">{booking.serviceType || 'N/A'}</p>
                 </div>
               </div>
               <div className="flex items-start gap-3">
@@ -360,7 +379,7 @@ const BookingDetails = () => {
                 <div className="flex-1">
                   <p className="text-sm text-gray-500">Service Location</p>
                   <p className="font-medium text-gray-900">
-                    {booking.serviceLocation?.address || 
+                    {booking.serviceLocation?.address ||
                      `${booking.serviceLocation?.city || ''}, ${booking.serviceLocation?.district || ''}`.trim() ||
                      'Location not specified'}
                   </p>
@@ -389,7 +408,7 @@ const BookingDetails = () => {
           </div>
         </Card>
 
-        {/* ✅ FIXED: Worker Information Card - Shows ONLY ONCE, for ALL bookings with worker */}
+        {/* Worker Information Card - ONLY ONCE */}
         {hasWorkerInfo && (
           <Card>
             <div className="p-6">
@@ -407,33 +426,35 @@ const BookingDetails = () => {
                   </div>
                 )}
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">
-                    {booking.workerId?.fullName || booking.workerId?.name || 'Worker'}
-                  </h3>
+                  <p className="font-semibold text-gray-900">
+                    {booking.workerId?.fullName || booking.workerId?.name || 'Worker Name'}
+                  </p>
                   {booking.workerId?.phoneNumber && (
                     <p className="text-sm text-gray-600">{booking.workerId.phoneNumber}</p>
                   )}
+                  {booking.workerId?.serviceCategories && (
+                    <p className="text-sm text-gray-600 capitalize">
+                      {booking.workerId.serviceCategories.join(', ')}
+                    </p>
+                  )}
                 </div>
               </div>
-              
-              {/* ✅ FIXED: Action Buttons - Shows for ALL bookings with worker */}
               <div className="flex gap-3">
-                <Button
+                <button
                   onClick={handleMessageWorker}
-                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
                 >
                   <MessageCircle className="w-4 h-4" />
                   Message Worker
-                </Button>
+                </button>
                 {booking.workerId?.phoneNumber && (
-                  <Button
+                  <button
                     onClick={handleCallWorker}
-                    variant="outline"
-                    className="flex items-center justify-center gap-2"
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
                     <Phone className="w-4 h-4" />
-                    Call
-                  </Button>
+                    Call Worker
+                  </button>
                 )}
               </div>
             </div>
@@ -474,7 +495,7 @@ const BookingDetails = () => {
           </Card>
         )}
 
-        {/* Problem Images Card */}
+        {/* Problem Images Card - ONLY ONCE */}
         {booking.problemImages && booking.problemImages.length > 0 && (
           <Card>
             <div className="p-6">
@@ -518,7 +539,7 @@ const BookingDetails = () => {
           </Card>
         )}
 
-        {/* Timeline Card */}
+        {/* Timeline Card - ONLY ONCE */}
         <Card>
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h2>
@@ -555,25 +576,27 @@ const BookingDetails = () => {
           </div>
         </Card>
 
-        {/* Cancel Booking Action */}
+        {/* Cancel Booking Action - ONLY ONCE */}
         {(booking.status === 'quote_requested' || booking.status === 'pending') && (
           <Card>
             <div className="p-6">
-              <Button
+              <button
                 onClick={handleCancelBooking}
-                variant="outline"
-                className="w-full text-red-600 border-red-300 hover:bg-red-50"
                 disabled={actionLoading}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {actionLoading ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Cancelling...
                   </>
                 ) : (
-                  'Cancel Booking'
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    Cancel Booking
+                  </>
                 )}
-              </Button>
+              </button>
             </div>
           </Card>
         )}
