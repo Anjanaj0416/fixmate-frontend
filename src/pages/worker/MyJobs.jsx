@@ -7,10 +7,10 @@ import Spinner from '../../components/common/Spinner';
 import BookingCard from '../../components/booking/BookingCard';
 
 /**
- * My Jobs Component - WITH COMPLETE BOOKING FUNCTIONALITY
- * ✅ Fixed: Active filter now fetches all bookings and filters client-side
- * ✅ Added: Complete booking handler
- * ✅ Maintains existing interface and functionality
+ * My Jobs Component - FIXED VERSION
+ * ✅ Fixed: Passes booking object correctly to BookingCard
+ * ✅ Fixed: Complete booking handler
+ * ✅ Fixed: Active filter
  */
 const MyJobs = () => {
   const navigate = useNavigate();
@@ -42,19 +42,16 @@ const MyJobs = () => {
       
       console.log('🔍 Fetching bookings with filter:', filter);
       
-      // Build query params
       const params = new URLSearchParams({
         role: 'worker'
       });
       
-      // ✅ FIX: Don't send 'active' status to backend
       if (filter !== 'all' && filter !== 'active') {
         params.append('status', filter);
       }
       
       console.log('📡 API Request params:', params.toString());
       
-      // ✅ Try multiple endpoint strategies
       const endpoints = [
         `/bookings/my?${params}`,
         `/bookings?${params}`,
@@ -123,7 +120,6 @@ const MyJobs = () => {
     }
   };
 
-  // ✅ NEW: Handle completing a booking
   const handleCompleteBooking = async (bookingId) => {
     try {
       const token = localStorage.getItem('fixmate_auth_token');
@@ -150,13 +146,9 @@ const MyJobs = () => {
       const data = await response.json();
       console.log('✅ Booking completed successfully:', data);
 
-      // Show success message
       alert('Job marked as completed successfully! 🎉');
-
-      // Refresh bookings list
       await fetchBookings();
 
-      // If we're on active filter and no more active jobs, show completed instead
       const remainingActive = bookings.filter(b => 
         b._id !== bookingId && 
         ['accepted', 'in_progress', 'in-progress'].includes(b.status?.toLowerCase())
@@ -169,7 +161,7 @@ const MyJobs = () => {
 
     } catch (error) {
       console.error('❌ Error completing booking:', error);
-      throw error; // Re-throw to let BookingCard handle the error display
+      throw error;
     }
   };
 
@@ -191,7 +183,6 @@ const MyJobs = () => {
       return bookings;
     }
     
-    // ✅ Handle 'active' filter
     if (filter === 'active') {
       const activeBookings = bookings.filter(b => {
         const status = b?.status?.toLowerCase();
@@ -204,7 +195,6 @@ const MyJobs = () => {
       return activeBookings;
     }
     
-    // For other filters, match the exact status
     const filtered = bookings.filter(b => {
       const status = b?.status?.toLowerCase();
       const filterLower = filter.toLowerCase();
@@ -233,7 +223,6 @@ const MyJobs = () => {
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header with Back Button */}
         <div className="mb-8 flex items-center gap-4">
           <button
             onClick={() => navigate('/worker/dashboard')}
@@ -249,7 +238,6 @@ const MyJobs = () => {
           <p className="text-gray-600">Manage all your job bookings</p>
         </div>
 
-        {/* Error State */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center gap-3">
@@ -268,7 +256,6 @@ const MyJobs = () => {
           </div>
         )}
 
-        {/* Filters */}
         <div className="bg-white rounded-lg shadow-md p-4 mb-6">
           <div className="flex flex-wrap gap-3">
             {filters.map(({ value, label, icon: Icon }) => (
@@ -288,7 +275,6 @@ const MyJobs = () => {
           </div>
         </div>
 
-        {/* Bookings List */}
         {filteredBookings.length === 0 ? (
           <Card className="text-center py-12">
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
@@ -328,10 +314,16 @@ const MyJobs = () => {
                 booking={booking}
                 workerView={true}
                 onCompleteBooking={handleCompleteBooking}
-                onViewDetails={(booking) => {
-                  console.log('View details for booking:', booking._id);
-                  // Navigate to booking details page when implemented
-                  // navigate(`/worker/bookings/${booking._id}`);
+                onViewDetails={() => {
+                  // ✅ FIX: Pass the booking object when navigating
+                  if (!booking || !booking._id) {
+                    console.error('❌ Invalid booking object:', booking);
+                    alert('Cannot view details: Invalid booking data');
+                    return;
+                  }
+                  
+                  console.log('👁️ Viewing details for booking:', booking._id);
+                  navigate(`/worker/bookings/${booking._id}`);
                 }}
               />
             ))}

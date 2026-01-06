@@ -14,10 +14,13 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
-  Timer
+  Timer,
+  Star
 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Spinner from '../../components/common/Spinner';
+import ReviewModal from '../../components/review/ReviewModal';
+import reviewService from '../../services/reviewService';
 
 const BookingDetails = () => {
   const { bookingId } = useParams();
@@ -27,12 +30,53 @@ const BookingDetails = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Review states
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [hasReview, setHasReview] = useState(false);
+  const [existingReview, setExistingReview] = useState(null);
 
   useEffect(() => {
     if (bookingId) {
       fetchBookingDetails();
+      checkExistingReview();
     }
   }, [bookingId]);
+
+  const checkExistingReview = async () => {
+    try {
+      const response = await reviewService.getBookingReview(bookingId);
+      if (response.success && response.data) {
+        setHasReview(true);
+        setExistingReview(response.data.review);
+        console.log('✅ Existing review found:', response.data.review);
+      }
+    } catch (error) {
+      console.log('ℹ️ No existing review for this booking');
+      setHasReview(false);
+    }
+  };
+
+  const handleSubmitReview = async (reviewData) => {
+    try {
+      console.log('📝 Submitting review:', reviewData);
+      
+      const response = await reviewService.createReview(reviewData);
+      
+      if (response.success) {
+        console.log('✅ Review submitted successfully');
+        alert('Thank you for your review!');
+        setShowReviewModal(false);
+        setHasReview(true);
+        checkExistingReview();
+      } else {
+        throw new Error(response.message || 'Failed to submit review');
+      }
+    } catch (error) {
+      console.error('❌ Error submitting review:', error);
+      throw error;
+    }
+  };
 
   const fetchBookingDetails = async () => {
     try {
@@ -94,7 +138,6 @@ const BookingDetails = () => {
       return;
     }
 
-    // Handle both object and string workerId
     let workerId;
     if (typeof booking.workerId === 'object') {
       workerId = booking.workerId._id || booking.workerId.id;
@@ -157,7 +200,7 @@ const BookingDetails = () => {
       
       if (data.success) {
         alert('Booking cancelled successfully');
-        fetchBookingDetails(); // Refresh booking data
+        fetchBookingDetails();
       } else {
         throw new Error(data.message || 'Failed to cancel booking');
       }
@@ -169,7 +212,6 @@ const BookingDetails = () => {
     }
   };
 
-  // Format date helper
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -180,7 +222,6 @@ const BookingDetails = () => {
     });
   };
 
-  // Format time helper
   const formatTime = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -190,7 +231,6 @@ const BookingDetails = () => {
     });
   };
 
-  // Get status configuration
   const getStatusConfig = (status) => {
     const configs = {
       quote_requested: {
@@ -246,7 +286,6 @@ const BookingDetails = () => {
     return configs[status] || configs.pending;
   };
 
-  // Loading state
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -258,7 +297,6 @@ const BookingDetails = () => {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -279,7 +317,6 @@ const BookingDetails = () => {
     );
   }
 
-  // No booking data
   if (!booking) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -299,12 +336,14 @@ const BookingDetails = () => {
   const statusConfig = getStatusConfig(booking.status);
   const StatusIcon = statusConfig.icon;
 
-  // Check if worker information exists
   const hasWorkerInfo = booking.workerId && (
     typeof booking.workerId === 'object'
       ? (booking.workerId._id || booking.workerId.id)
       : booking.workerId
   );
+
+  // Show review button only for completed bookings
+  const canReview = booking.status === 'completed' && hasWorkerInfo;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -408,7 +447,7 @@ const BookingDetails = () => {
           </div>
         </Card>
 
-        {/* Worker Information Card - ONLY ONCE */}
+        {/* Worker Information Card */}
         {hasWorkerInfo && (
           <Card>
             <div className="p-6">
@@ -495,7 +534,7 @@ const BookingDetails = () => {
           </Card>
         )}
 
-        {/* Problem Images Card - ONLY ONCE */}
+        {/* Problem Images Card */}
         {booking.problemImages && booking.problemImages.length > 0 && (
           <Card>
             <div className="p-6">
@@ -539,7 +578,7 @@ const BookingDetails = () => {
           </Card>
         )}
 
-        {/* Timeline Card - ONLY ONCE */}
+        {/* Timeline Card */}
         <Card>
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Timeline</h2>
@@ -576,7 +615,70 @@ const BookingDetails = () => {
           </div>
         </Card>
 
-        {/* Cancel Booking Action - ONLY ONCE */}
+        {/* ✅ NEW: Review Section for Completed Bookings */}
+        {canReview && (
+          <Card>
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Review</h2>
+              
+              {hasReview ? (
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          size={20}
+                          className={`${
+                            i < (existingReview?.rating || 0)
+                              ? 'text-yellow-400 fill-yellow-400'
+                              : 'text-gray-300'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-sm text-gray-600">
+                      {existingReview?.rating}/5
+                    </span>
+                  </div>
+                  {existingReview?.comment && (
+                    <p className="text-gray-700 mb-3">{existingReview.comment}</p>
+                  )}
+                  {existingReview?.images && existingReview.images.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-3">
+                      {existingReview.images.map((img, idx) => (
+                        <img
+                          key={idx}
+                          src={img.imageUrl || img}
+                          alt={`Review ${idx + 1}`}
+                          className="w-full h-24 object-cover rounded-lg"
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-xs text-gray-500 mt-3">
+                    Reviewed on {formatDate(existingReview?.createdAt)}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center">
+                  <p className="text-gray-600 mb-4">
+                    Share your experience with {booking.workerId?.fullName || 'the worker'}
+                  </p>
+                  <button
+                    onClick={() => setShowReviewModal(true)}
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <Star className="w-5 h-5" />
+                    Write a Review
+                  </button>
+                </div>
+              )}
+            </div>
+          </Card>
+        )}
+
+        {/* Cancel Booking Action */}
         {(booking.status === 'quote_requested' || booking.status === 'pending') && (
           <Card>
             <div className="p-6">
@@ -601,6 +703,16 @@ const BookingDetails = () => {
           </Card>
         )}
       </div>
+
+      {/* Review Modal */}
+      {showReviewModal && (
+        <ReviewModal
+          isOpen={showReviewModal}
+          onClose={() => setShowReviewModal(false)}
+          booking={booking}
+          onSubmit={handleSubmitReview}
+        />
+      )}
     </div>
   );
 };

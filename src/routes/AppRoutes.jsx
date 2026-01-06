@@ -27,6 +27,7 @@ import WorkerDashboard from '../pages/worker/WorkerDashboard';
 import MyJobs from '../pages/worker/MyJobs';
 import Earnings from '../pages/worker/Earnings';
 import WorkerProfilePage from '../pages/worker/WorkerProfile';
+import WorkerBookingDetails from '../pages/worker/WorkerBookingDetails'; // ✅ NEW
 
 // Admin pages
 import AdminPanel from '../pages/admin/AdminPanel';
@@ -44,14 +45,14 @@ import WorkerBookingRequests from '../pages/worker/WorkerBookingRequests';
 import BookingDetails from '../pages/customer/BookingDetails';
 import CustomerMessages from '../pages/customer/CustomerMessages';
 
-// ✅ NEW: Worker Messaging Components
+// Worker Messaging Components
 import WorkerMessages from '../pages/worker/WorkerMessages';
 import WorkerChatPage from '../pages/worker/WorkerChatPage';
 
 
 /**
  * App Routes Component
- * ✅ UPDATED: Added worker messaging routes
+ * ✅ UPDATED: Added worker booking details route
  * Defines all application routes with proper authentication and role-based access
  */
 const AppRoutes = () => {
@@ -227,6 +228,19 @@ const AppRoutes = () => {
           </PrivateRoute>
         }
       />
+      
+      {/* ✅ NEW: Worker Booking Details Route */}
+      <Route
+        path="/worker/bookings/:id"
+        element={
+          <PrivateRoute>
+            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
+              <WorkerBookingDetails />
+            </RoleBasedRoute>
+          </PrivateRoute>
+        }
+      />
+
       <Route
         path="/worker/earnings"
         element={
@@ -258,7 +272,7 @@ const AppRoutes = () => {
         }
       />
 
-      {/* ✅ NEW: Worker Messaging Routes */}
+      {/* Worker Messaging Routes */}
       <Route
         path="/worker/messages"
         element={
