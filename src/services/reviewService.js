@@ -3,6 +3,8 @@ import api, { createFormData } from './api';
 /**
  * Review Service
  * Handles reviews and ratings management
+ * 
+ * ✅ UPDATED: Fixed image upload and API endpoints
  */
 
 class ReviewService {
@@ -10,20 +12,47 @@ class ReviewService {
   // ============= CREATE & MANAGE REVIEWS =============
 
   /**
-   * Create a review
+   * Create a review with proper FormData handling
    */
   async createReview(reviewData) {
     try {
-      const formData = createFormData(reviewData);
+      console.log('📝 ReviewService - Creating review with data:', reviewData);
 
+      const formData = new FormData();
+      
+      // Add basic fields
+      formData.append('bookingId', reviewData.bookingId);
+      formData.append('workerId', reviewData.workerId);
+      formData.append('rating', reviewData.rating.toString());
+      formData.append('comment', reviewData.comment);
+      formData.append('wouldRecommend', reviewData.wouldRecommend.toString());
+      
+      // Add detailed ratings as JSON string
+      if (reviewData.detailedRatings) {
+        formData.append('detailedRatings', JSON.stringify(reviewData.detailedRatings));
+      }
+      
+      // Add images as files
+      if (reviewData.images && reviewData.images.length > 0) {
+        console.log(`📸 Adding ${reviewData.images.length} images to FormData`);
+        reviewData.images.forEach((image, index) => {
+          formData.append('images', image);
+          console.log(`  Image ${index + 1}: ${image.name} (${image.size} bytes)`);
+        });
+      }
+
+      // Make API call with FormData
       const response = await api.post('/reviews', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-      return response.data;
+
+      console.log('✅ Review created successfully:', response);
+      return response;
     } catch (error) {
-      console.error('Create review error:', error);
+      console.error('❌ Create review error:', error);
+      console.error('Error response:', error.response?.data);
       throw error;
     }
   }
@@ -34,7 +63,7 @@ class ReviewService {
   async getReview(reviewId) {
     try {
       const response = await api.get(`/reviews/${reviewId}`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get review error:', error);
       throw error;
@@ -47,7 +76,7 @@ class ReviewService {
   async updateReview(reviewId, updateData) {
     try {
       const response = await api.put(`/reviews/${reviewId}`, updateData);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Update review error:', error);
       throw error;
@@ -60,7 +89,7 @@ class ReviewService {
   async deleteReview(reviewId) {
     try {
       const response = await api.delete(`/reviews/${reviewId}`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Delete review error:', error);
       throw error;
@@ -76,7 +105,7 @@ class ReviewService {
     try {
       const params = { page, limit, ...filters };
       const response = await api.get(`/reviews/worker/${workerId}`, { params });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get worker reviews error:', error);
       throw error;
@@ -89,7 +118,7 @@ class ReviewService {
   async getWorkerReviewSummary(workerId) {
     try {
       const response = await api.get(`/reviews/worker/${workerId}/summary`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get worker review summary error:', error);
       throw error;
@@ -102,7 +131,7 @@ class ReviewService {
   async getWorkerRatingBreakdown(workerId) {
     try {
       const response = await api.get(`/reviews/worker/${workerId}/breakdown`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get rating breakdown error:', error);
       throw error;
@@ -121,7 +150,7 @@ class ReviewService {
         ? `/reviews/user/${userId}` 
         : '/reviews/my';
       const response = await api.get(endpoint, { params });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get user reviews error:', error);
       throw error;
@@ -144,24 +173,32 @@ class ReviewService {
 
   /**
    * Get review for a specific booking
+   * ✅ UPDATED: Better error handling for 404 responses
    */
   async getBookingReview(bookingId) {
     try {
+      console.log('📋 Getting review for booking:', bookingId);
       const response = await api.get(`/reviews/booking/${bookingId}`);
-      return response.data;
+      return response;
     } catch (error) {
-      console.error('Get booking review error:', error);
+      // If 404, it means no review exists - this is expected
+      if (error.response?.status === 404) {
+        console.log('ℹ️ No review found for booking:', bookingId);
+        return { success: false, data: null };
+      }
+      console.error('❌ Get booking review error:', error);
       throw error;
     }
   }
 
   /**
    * Check if booking can be reviewed
+   * ✅ NEW: Added this method
    */
   async canReviewBooking(bookingId) {
     try {
       const response = await api.get(`/reviews/booking/${bookingId}/can-review`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Check can review error:', error);
       throw error;
@@ -176,7 +213,7 @@ class ReviewService {
   async markAsHelpful(reviewId) {
     try {
       const response = await api.post(`/reviews/${reviewId}/helpful`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Mark as helpful error:', error);
       throw error;
@@ -189,7 +226,7 @@ class ReviewService {
   async removeHelpfulMark(reviewId) {
     try {
       const response = await api.delete(`/reviews/${reviewId}/helpful`);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Remove helpful mark error:', error);
       throw error;
@@ -202,7 +239,7 @@ class ReviewService {
   async reportReview(reviewId, reason) {
     try {
       const response = await api.post(`/reviews/${reviewId}/report`, { reason });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Report review error:', error);
       throw error;
@@ -218,7 +255,7 @@ class ReviewService {
     try {
       const params = { page, limit };
       const response = await api.get('/reviews/reported', { params });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get reported reviews error:', error);
       throw error;
@@ -234,7 +271,7 @@ class ReviewService {
         action,
         reason
       });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Moderate review error:', error);
       throw error;
@@ -252,7 +289,7 @@ class ReviewService {
         ? `/reviews/worker/${workerId}/statistics`
         : '/reviews/statistics';
       const response = await api.get(endpoint);
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get review statistics error:', error);
       throw error;
@@ -267,7 +304,7 @@ class ReviewService {
       const response = await api.get('/reviews/trending', {
         params: { limit }
       });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get trending reviews error:', error);
       throw error;
@@ -282,7 +319,7 @@ class ReviewService {
       const response = await api.get('/reviews/recent', {
         params: { limit }
       });
-      return response.data;
+      return response;
     } catch (error) {
       console.error('Get recent reviews error:', error);
       throw error;

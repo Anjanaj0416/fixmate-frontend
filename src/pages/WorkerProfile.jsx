@@ -13,12 +13,10 @@ import {
   Shield,
   Heart,
   Send,
-  CheckCircle,
-  User,
-  ThumbsUp
+  CheckCircle
 } from 'lucide-react';
 import apiService from '../services/apiService';
-import reviewService from '../services/reviewService';
+import WorkerReviewsSection from '../components/review/WorkerReviewsSection';
 
 const WorkerProfile = () => {
   const { workerId } = useParams();
@@ -26,7 +24,6 @@ const WorkerProfile = () => {
   const navigate = useNavigate();
 
   const [worker, setWorker] = useState(null);
-  const [reviews, setReviews] = useState([]);
   const [completedJobs, setCompletedJobs] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -36,14 +33,6 @@ const WorkerProfile = () => {
   const [sent, setSent] = useState(false);
   const [alreadySent, setAlreadySent] = useState(false);
 
-  // Review states
-  const [totalReviews, setTotalReviews] = useState(0);
-  const [reviewPage, setReviewPage] = useState(1);
-  const [hasMoreReviews, setHasMoreReviews] = useState(false);
-  const [loadingMoreReviews, setLoadingMoreReviews] = useState(false);
-  const [selectedRating, setSelectedRating] = useState(null);
-  const [reviewStats, setReviewStats] = useState(null);
-
   const quoteRequestId = location.state?.quoteRequestId;
   const returnTo = location.state?.returnTo;
   const returnState = location.state?.returnState;
@@ -51,68 +40,9 @@ const WorkerProfile = () => {
   useEffect(() => {
     if (workerId) {
       fetchWorkerProfile();
-      fetchWorkerReviews(1, null);
       checkIfQuoteAlreadySent();
     }
   }, [workerId]);
-
-  const fetchWorkerReviews = async (page = 1, rating = null) => {
-    try {
-      if (page === 1) {
-        setLoading(true);
-      } else {
-        setLoadingMoreReviews(true);
-      }
-
-      const filters = rating ? { rating } : {};
-      const response = await reviewService.getWorkerReviews(workerId, page, 10, filters);
-
-      if (response.success && response.data) {
-        const newReviews = response.data.reviews || [];
-        
-        if (page === 1) {
-          setReviews(newReviews);
-        } else {
-          setReviews(prev => [...prev, ...newReviews]);
-        }
-
-        setTotalReviews(response.data.total || 0);
-        setHasMoreReviews(page < (response.data.totalPages || 1));
-        setReviewPage(page);
-
-        if (response.data.ratingDistribution) {
-          const stats = {
-            distribution: response.data.ratingDistribution,
-            total: response.data.total,
-            average: calculateAverageFromDistribution(response.data.ratingDistribution, response.data.total)
-          };
-          setReviewStats(stats);
-        }
-      }
-    } catch (error) {
-      console.error('❌ Error fetching reviews:', error);
-    } finally {
-      setLoading(false);
-      setLoadingMoreReviews(false);
-    }
-  };
-
-  const calculateAverageFromDistribution = (distribution, total) => {
-    if (!distribution || distribution.length === 0 || total === 0) return 0;
-    const sum = distribution.reduce((acc, item) => acc + (item._id * item.count), 0);
-    return (sum / total).toFixed(1);
-  };
-
-  const handleFilterByRating = (rating) => {
-    const newRating = selectedRating === rating ? null : rating;
-    setSelectedRating(newRating);
-    setReviewPage(1);
-    fetchWorkerReviews(1, newRating);
-  };
-
-  const handleLoadMoreReviews = () => {
-    fetchWorkerReviews(reviewPage + 1, selectedRating);
-  };
 
   const checkIfQuoteAlreadySent = async () => {
     if (!quoteRequestId) return;
@@ -283,15 +213,6 @@ const WorkerProfile = () => {
     return `LKR ${amount.toLocaleString()}`;
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
-
   if (loading && !worker) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -409,7 +330,7 @@ const WorkerProfile = () => {
                         {(worker.averageRating || 0).toFixed(1)}
                       </span>
                       <span className="text-gray-500">
-                        ({totalReviews} reviews)
+                        ({worker.rating?.count || 0} reviews)
                       </span>
                     </div>
                   </div>
@@ -499,196 +420,12 @@ const WorkerProfile = () => {
               )}
             </div>
 
-            {/* ✅ ENHANCED Reviews Section */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Reviews ({totalReviews})
-                </h3>
-              </div>
-
-              {/* Rating Statistics */}
-              {reviewStats && reviewStats.distribution && (
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <div className="flex items-center gap-2 mb-4">
-                    <span className="text-3xl font-bold text-gray-900">
-                      {reviewStats.average}
-                    </span>
-                    <div>
-                      <div className="flex items-center">
-                        {[...Array(5)].map((_, i) => (
-                          <Star
-                            key={i}
-                            size={20}
-                            className={
-                              i < Math.round(reviewStats.average)
-                                ? 'text-yellow-400 fill-yellow-400'
-                                : 'text-gray-300'
-                            }
-                          />
-                        ))}
-                      </div>
-                      <span className="text-sm text-gray-600">
-                        Based on {totalReviews} reviews
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    {[5, 4, 3, 2, 1].map((rating) => {
-                      const ratingData = reviewStats.distribution.find(d => d._id === rating);
-                      const count = ratingData?.count || 0;
-                      const percentage = totalReviews > 0 ? (count / totalReviews) * 100 : 0;
-
-                      return (
-                        <button
-                          key={rating}
-                          onClick={() => handleFilterByRating(rating)}
-                          className={`w-full flex items-center gap-3 text-sm hover:bg-white p-2 rounded transition-colors ${
-                            selectedRating === rating ? 'bg-white ring-2 ring-indigo-500' : ''
-                          }`}
-                        >
-                          <span className="text-gray-700 w-12 text-right">{rating} star</span>
-                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-yellow-400 transition-all"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <span className="text-gray-600 w-12">{count}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {selectedRating && (
-                    <button
-                      onClick={() => handleFilterByRating(null)}
-                      className="mt-3 text-sm text-indigo-600 hover:text-indigo-700"
-                    >
-                      Clear filter
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Reviews List */}
-              {reviews.length > 0 ? (
-                <div className="space-y-6">
-                  {reviews.map((review) => (
-                    <div key={review._id} className="border-b border-gray-200 pb-6 last:border-0">
-                      <div className="flex items-start justify-between mb-3">
-                        <div className="flex items-center gap-3">
-                          {review.customerId?.profileImage ? (
-                            <img
-                              src={review.customerId.profileImage}
-                              alt={review.customerId.fullName || 'Customer'}
-                              className="w-10 h-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-                              <User size={20} className="text-gray-500" />
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-semibold text-gray-900">
-                              {review.customerId?.fullName || 'Anonymous'}
-                            </p>
-                            <p className="text-sm text-gray-500">
-                              {formatDate(review.createdAt)}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              size={16}
-                              className={
-                                i < review.rating
-                                  ? 'text-yellow-400 fill-yellow-400'
-                                  : 'text-gray-300'
-                              }
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      {review.comment && (
-                        <p className="text-gray-700 mb-3">{review.comment}</p>
-                      )}
-
-                      {review.images && review.images.length > 0 && (
-                        <div className="grid grid-cols-3 gap-2 mb-3">
-                          {review.images.map((img, idx) => (
-                            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
-                              <img
-                                src={img.imageUrl || img}
-                                alt={img.caption || `Review image ${idx + 1}`}
-                                className="w-full h-full object-cover hover:scale-110 transition-transform cursor-pointer"
-                                onClick={() => window.open(img.imageUrl || img, '_blank')}
-                              />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {review.wouldRecommend && (
-                        <div className="inline-flex items-center gap-1 px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
-                          <ThumbsUp size={14} />
-                          <span>Recommends</span>
-                        </div>
-                      )}
-
-                      {review.workerResponse && (
-                        <div className="mt-4 pl-6 border-l-2 border-indigo-200">
-                          <div className="bg-indigo-50 rounded-lg p-4">
-                            <p className="text-sm font-semibold text-indigo-900 mb-2">
-                              Response from {worker.userId?.fullName}
-                            </p>
-                            <p className="text-sm text-gray-700">
-                              {review.workerResponse.message}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-2">
-                              {formatDate(review.workerResponse.respondedAt)}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {hasMoreReviews && (
-                    <div className="text-center pt-4">
-                      <button
-                        onClick={handleLoadMoreReviews}
-                        disabled={loadingMoreReviews}
-                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                      >
-                        {loadingMoreReviews ? (
-                          <span className="flex items-center gap-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
-                            Loading...
-                          </span>
-                        ) : (
-                          'Load More Reviews'
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Star className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600">
-                    {selectedRating
-                      ? `No ${selectedRating}-star reviews yet`
-                      : 'No reviews yet'}
-                  </p>
-                </div>
-              )}
-            </div>
+            {/* ✅ NEW: Worker Reviews Section Component */}
+            {worker && (worker.userId?._id || worker.userId) && (
+              <WorkerReviewsSection 
+                workerId={worker.userId?._id || worker.userId} 
+              />
+            )}
           </div>
 
           {/* Right Sidebar */}
