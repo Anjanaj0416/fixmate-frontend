@@ -56,8 +56,13 @@ const WorkerProfile = () => {
     }
   }, [workerId]);
 
+  // Enhanced fetchWorkerReviews function with better error handling
+  // Replace the existing fetchWorkerReviews function in WorkerProfile.jsx
+
   const fetchWorkerReviews = async (page = 1, rating = null) => {
     try {
+      console.log('📊 Fetching reviews for worker:', workerId, 'page:', page, 'rating filter:', rating);
+
       if (page === 1) {
         setLoading(true);
       } else {
@@ -65,10 +70,17 @@ const WorkerProfile = () => {
       }
 
       const filters = rating ? { rating } : {};
-      const response = await reviewService.getWorkerReviews(workerId, page, 10, filters);
+      console.log('📊 Review filters:', filters);
 
-      if (response.success && response.data) {
+      const response = await reviewService.getWorkerReviews(workerId, page, 10, filters);
+      console.log('📊 Reviews API response:', response);
+
+      if (response && response.success && response.data) {
         const newReviews = response.data.reviews || [];
+
+        console.log(`📊 Reviews received: ${newReviews.length}`);
+        console.log('📊 Total reviews:', response.data.total);
+        console.log('📊 Rating distribution:', response.data.ratingDistribution);
 
         if (page === 1) {
           setReviews(newReviews);
@@ -86,11 +98,40 @@ const WorkerProfile = () => {
             total: response.data.total,
             average: calculateAverageFromDistribution(response.data.ratingDistribution, response.data.total)
           };
+          console.log('📊 Review stats calculated:', stats);
           setReviewStats(stats);
+        } else {
+          console.warn('⚠️ No rating distribution in response');
         }
+      } else {
+        console.warn('⚠️ Reviews API returned unexpected format:', response);
+        // Set empty state when no data
+        setReviews([]);
+        setTotalReviews(0);
+        setReviewStats(null);
       }
     } catch (error) {
       console.error('❌ Error fetching reviews:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      });
+
+      // Set empty state on error
+      setReviews([]);
+      setTotalReviews(0);
+      setReviewStats(null);
+
+      // Log specific error types
+      if (error.response?.status === 404) {
+        console.log('ℹ️ Reviews endpoint returned 404 - worker may have no reviews yet');
+      } else if (error.response?.status === 500) {
+        console.error('❌ Server error fetching reviews - check backend logs');
+      } else if (error.code === 'ERR_NETWORK') {
+        console.error('❌ Network error - check if backend is running');
+      }
     } finally {
       setLoading(false);
       setLoadingMoreReviews(false);
@@ -406,10 +447,10 @@ const WorkerProfile = () => {
                         />
                       ))}
                       <span className="ml-2 text-gray-700 font-medium">
-                        {(worker.rating || 0).toFixed(1)}  
+                        {(worker.rating || 0).toFixed(1)}
                       </span>
                       <span className="text-gray-500">
-                        ({totalReviews} reviews)
+                        ({worker.totalReviews || 0} reviews)
                       </span>
                     </div>
                   </div>
@@ -722,8 +763,8 @@ const WorkerProfile = () => {
                   onClick={handleSendQuote}
                   disabled={sending || sent || alreadySent || !worker.availability}
                   className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${sent || alreadySent
-                      ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                    ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
                 >
                   {sending ? (
