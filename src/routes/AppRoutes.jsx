@@ -25,9 +25,9 @@ import CustomerProfile from '../pages/customer/Profile';
 // Worker pages
 import WorkerDashboard from '../pages/worker/WorkerDashboard';
 import MyJobs from '../pages/worker/MyJobs';
-import Earnings from '../pages/worker/Earnings';
+// import Earnings from '../pages/worker/Earnings'; // ❌ REMOVED - File doesn't exist
 import WorkerProfilePage from '../pages/worker/WorkerProfile';
-import WorkerBookingDetails from '../pages/worker/WorkerBookingDetails'; // ✅ NEW
+import WorkerBookingDetails from '../pages/worker/WorkerBookingDetails';
 
 // Admin pages
 import AdminPanel from '../pages/admin/AdminPanel';
@@ -49,10 +49,15 @@ import CustomerMessages from '../pages/customer/CustomerMessages';
 import WorkerMessages from '../pages/worker/WorkerMessages';
 import WorkerChatPage from '../pages/worker/WorkerChatPage';
 
+// ✅ NEW: Notification Components
+import Notifications from '../pages/Notifications';
+import ToastDemo from '../pages/ToastDemo'; // For development/testing only
+
 
 /**
  * App Routes Component
- * ✅ UPDATED: Added worker booking details route
+ * ✅ CLEANED: Removed Earnings route (file doesn't exist)
+ * ✅ UPDATED: Added notifications route and toast demo route
  * Defines all application routes with proper authentication and role-based access
  */
 const AppRoutes = () => {
@@ -67,6 +72,26 @@ const AppRoutes = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/customer/find-workers" element={<FindWorkers />} />
       <Route path="/customer/worker-profile/:workerId" element={<WorkerProfile />} />
+
+      {/* ✅ NEW: Notifications Route (accessible to all authenticated users) */}
+      <Route
+        path="/notifications"
+        element={
+          <PrivateRoute>
+            <Notifications />
+          </PrivateRoute>
+        }
+      />
+
+      {/* ✅ NEW: Toast Demo Route (DEVELOPMENT ONLY - Remove before production) */}
+      <Route
+        path="/toast-demo"
+        element={
+          <PrivateRoute>
+            <ToastDemo />
+          </PrivateRoute>
+        }
+      />
 
       {/* Customer Routes */}
       <Route
@@ -229,7 +254,7 @@ const AppRoutes = () => {
         }
       />
       
-      {/* ✅ NEW: Worker Booking Details Route */}
+      {/* Worker Booking Details Route */}
       <Route
         path="/worker/bookings/:id"
         element={
@@ -241,16 +266,9 @@ const AppRoutes = () => {
         }
       />
 
-      <Route
-        path="/worker/earnings"
-        element={
-          <PrivateRoute>
-            <RoleBasedRoute allowedRoles={[USER_ROLES.WORKER]}>
-              <Earnings />
-            </RoleBasedRoute>
-          </PrivateRoute>
-        }
-      />
+      {/* ❌ REMOVED: Earnings route - file doesn't exist */}
+      {/* <Route path="/worker/earnings" element={...} /> */}
+
       <Route
         path="/worker/profile"
         element={
