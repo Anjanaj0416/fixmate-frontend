@@ -31,7 +31,7 @@ const WorkerProfile = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isFavorite, setIsFavorite] = useState(false);
-  
+
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [alreadySent, setAlreadySent] = useState(false);
@@ -69,7 +69,7 @@ const WorkerProfile = () => {
 
       if (response.success && response.data) {
         const newReviews = response.data.reviews || [];
-        
+
         if (page === 1) {
           setReviews(newReviews);
         } else {
@@ -125,7 +125,7 @@ const WorkerProfile = () => {
         const wasSent = booking.sentToWorkers.some(
           id => id.toString() === workerId.toString()
         );
-        
+
         setAlreadySent(wasSent);
         if (wasSent) {
           setSent(true);
@@ -208,7 +208,7 @@ const WorkerProfile = () => {
       }
     } catch (error) {
       console.error('❌ Error sending quote:', error);
-      
+
       if (error.response?.data?.message?.includes('already sent')) {
         setAlreadySent(true);
         setSent(true);
@@ -247,7 +247,7 @@ const WorkerProfile = () => {
     }
 
     let chatUserId;
-    
+
     if (worker.userId) {
       if (typeof worker.userId === 'object' && worker.userId !== null) {
         chatUserId = worker.userId._id || worker.userId.id;
@@ -334,7 +334,7 @@ const WorkerProfile = () => {
               <ArrowLeft size={20} />
               <span className="font-medium">Back</span>
             </button>
-            
+
             <button
               onClick={handleFavoriteToggle}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -383,7 +383,7 @@ const WorkerProfile = () => {
                         </span>
                       </div>
                     </div>
-                    
+
                     {worker.isVerified && (
                       <div className="flex items-center gap-1 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm">
                         <Shield size={16} />
@@ -399,14 +399,14 @@ const WorkerProfile = () => {
                           key={i}
                           size={18}
                           className={
-                            i < Math.round(worker.averageRating || 0)
+                            i < Math.round(worker.rating || 0)  // ✅ Changed to worker.rating
                               ? 'text-yellow-400 fill-current'
                               : 'text-gray-300'
                           }
                         />
                       ))}
                       <span className="ml-2 text-gray-700 font-medium">
-                        {(worker.averageRating || 0).toFixed(1)}
+                        {(worker.rating || 0).toFixed(1)}  
                       </span>
                       <span className="text-gray-500">
                         ({totalReviews} reviews)
@@ -544,9 +544,8 @@ const WorkerProfile = () => {
                         <button
                           key={rating}
                           onClick={() => handleFilterByRating(rating)}
-                          className={`w-full flex items-center gap-3 text-sm hover:bg-white p-2 rounded transition-colors ${
-                            selectedRating === rating ? 'bg-white ring-2 ring-indigo-500' : ''
-                          }`}
+                          className={`w-full flex items-center gap-3 text-sm hover:bg-white p-2 rounded transition-colors ${selectedRating === rating ? 'bg-white ring-2 ring-indigo-500' : ''
+                            }`}
                         >
                           <span className="text-gray-700 w-12 text-right">{rating} star</span>
                           <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -599,7 +598,7 @@ const WorkerProfile = () => {
                             </p>
                           </div>
                         </div>
-                        
+
                         <div className="flex items-center gap-1">
                           {[...Array(5)].map((_, i) => (
                             <Star
@@ -697,7 +696,7 @@ const WorkerProfile = () => {
             {quoteRequestId && (
               <div className="bg-white rounded-lg shadow-md p-6 sticky top-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Send Quote Request</h3>
-                
+
                 <div className="space-y-4 mb-6">
                   <div>
                     <p className="text-sm text-gray-600">Hourly Rate</p>
@@ -708,12 +707,10 @@ const WorkerProfile = () => {
                   </div>
 
                   {worker.availability !== undefined && (
-                    <div className={`flex items-center gap-2 ${
-                      worker.availability ? 'text-green-600' : 'text-gray-500'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full ${
-                        worker.availability ? 'bg-green-500' : 'bg-gray-400'
-                      }`}></div>
+                    <div className={`flex items-center gap-2 ${worker.availability ? 'text-green-600' : 'text-gray-500'
+                      }`}>
+                      <div className={`w-2 h-2 rounded-full ${worker.availability ? 'bg-green-500' : 'bg-gray-400'
+                        }`}></div>
                       <span className="text-sm font-medium">
                         {worker.availability ? 'Available now' : 'Currently unavailable'}
                       </span>
@@ -724,11 +721,10 @@ const WorkerProfile = () => {
                 <button
                   onClick={handleSendQuote}
                   disabled={sending || sent || alreadySent || !worker.availability}
-                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${
-                    sent || alreadySent
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition-all ${sent || alreadySent
                       ? 'bg-green-50 text-green-700 border border-green-200 cursor-default'
                       : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                  }`}
+                    }`}
                 >
                   {sending ? (
                     <>
@@ -759,7 +755,7 @@ const WorkerProfile = () => {
             {/* Contact Card */}
             <div className="bg-white rounded-lg shadow-md p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Contact Information</h3>
-              
+
               <div className="space-y-3">
                 {worker.userId?.phoneNumber && (
                   <div className="flex items-center gap-3 text-gray-700">
@@ -793,15 +789,15 @@ const WorkerProfile = () => {
                   <p className="font-medium">
                     {worker.memberSince
                       ? new Date(worker.memberSince).toLocaleDateString('en-US', {
-                          month: 'long',
-                          year: 'numeric'
-                        })
+                        month: 'long',
+                        year: 'numeric'
+                      })
                       : worker.createdAt
-                      ? new Date(worker.createdAt).toLocaleDateString('en-US', {
+                        ? new Date(worker.createdAt).toLocaleDateString('en-US', {
                           month: 'long',
                           year: 'numeric'
                         })
-                      : 'N/A'}
+                        : 'N/A'}
                   </p>
                 </div>
               </div>

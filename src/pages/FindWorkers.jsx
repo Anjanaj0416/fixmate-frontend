@@ -119,7 +119,7 @@ function FindWorkers() {
   };
 
   const getRatingDisplay = (worker) => {
-    const rating = worker.averageRating || 0;
+    const rating = worker.rating || 0;
     const reviewCount = worker.totalReviews || 0;
     
     return {
