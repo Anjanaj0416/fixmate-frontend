@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Calendar, Star, MessageSquare, Clock, Briefcase, User, Settings, LogOut, ChevronDown } from 'lucide-react';
+import NotificationBell from '../../components/common/NotificationBell';
 
 /**
  * Enhanced Customer Dashboard
- * With profile dropdown menu and sign-out functionality
+ * ✅ UPDATED: Added NotificationBell component to header
+ * With profile dropdown menu, notifications, and sign-out functionality
  */
 const CustomerDashboard = () => {
   const navigate = useNavigate();
@@ -102,7 +104,7 @@ const CustomerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header Section with Profile Menu */}
+      {/* Header Section with Profile Menu and Notifications */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
@@ -115,7 +117,7 @@ const CustomerDashboard = () => {
               </p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               {/* Find Worker Button */}
               <button
                 onClick={handleFindWorker}
@@ -124,6 +126,9 @@ const CustomerDashboard = () => {
                 <Search size={20} />
                 Find Worker
               </button>
+
+              {/* ✅ NEW: Notification Bell */}
+              <NotificationBell />
 
               {/* Profile Dropdown */}
               <div className="relative profile-dropdown">

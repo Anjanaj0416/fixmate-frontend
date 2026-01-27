@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import useNotification from '../../hooks/useNotification';
+import apiService from '../../services/apiService';
 import { useNotificationToast } from '../../context/NotificationToastContext';
 
 /**
  * Notification Bell Component
+ * ✅ FIXED: Uses apiService with automatic token refresh
+ * ✅ FIXED: Handles 401 errors properly
  * Displays notification icon with unread count badge
  * Shows dropdown with recent notifications
  * Integrates with toast notification system
@@ -14,24 +16,25 @@ const NotificationBell = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [recentNotifications, setRecentNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
   
-  const { unreadCount, notifications, fetchNotifications, markAsRead } = useNotification();
   const { checkForNewNotifications } = useNotificationToast();
 
-  // Fetch notifications on mount and when dropdown opens
+  // Fetch notifications on mount
+  useEffect(() => {
+    fetchNotifications();
+    fetchUnreadCount();
+  }, []);
+
+  // Fetch notifications when dropdown opens
   useEffect(() => {
     if (isOpen) {
       fetchNotifications();
+      fetchUnreadCount();
     }
-  }, [isOpen, fetchNotifications]);
-
-  // Update recent notifications
-  useEffect(() => {
-    if (notifications && notifications.length > 0) {
-      setRecentNotifications(notifications.slice(0, 5));
-    }
-  }, [notifications]);
+  }, [isOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -50,31 +53,108 @@ const NotificationBell = () => {
     };
   }, [isOpen]);
 
+  // Fetch recent notifications
+  const fetchNotifications = async () => {
+    if (loading) return;
+    
+    try {
+      setLoading(true);
+      console.log('🔔 Fetching notifications...');
+      
+      // Use apiService with automatic token refresh
+      const response = await apiService.get('/notifications', {
+        params: { 
+          page: 1,
+          limit: 5,
+          isRead: false  // Only get unread notifications
+        }
+      });
+      
+      console.log('✅ Notifications response:', response);
+      
+      if (response.success) {
+        // Handle different response structures
+        const notifs = response.data?.notifications || response.data || [];
+        console.log('📬 Found notifications:', notifs.length);
+        setRecentNotifications(notifs);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching notifications:', error);
+      // Don't show error to user, just log it
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch unread count
+  const fetchUnreadCount = async () => {
+    try {
+      console.log('📊 Fetching unread count...');
+      
+      // Use apiService with automatic token refresh
+      const response = await apiService.get('/notifications/unread-count');
+      
+      console.log('✅ Unread count response:', response);
+      
+      if (response.success) {
+        const count = response.data?.unreadCount || 0;
+        console.log('📊 Unread count:', count);
+        setUnreadCount(count);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching unread count:', error);
+      // Don't show error to user, just log it
+    }
+  };
+
   // Manually trigger notification check
   const handleBellClick = () => {
     setIsOpen(!isOpen);
     if (!isOpen) {
       // Check for new notifications when opening dropdown
+      console.log('🔔 Bell clicked, fetching fresh notifications...');
       checkForNewNotifications();
+      fetchNotifications();
+      fetchUnreadCount();
     }
   };
 
   const handleNotificationClick = async (notification) => {
-    // Mark as read
-    if (!notification.isRead) {
-      await markAsRead(notification._id);
-    }
+    try {
+      console.log('📍 Notification clicked:', notification._id);
+      
+      // Mark as read
+      if (!notification.isRead) {
+        await apiService.put(`/notifications/${notification._id}/read`);
+        console.log('✅ Marked as read:', notification._id);
+        
+        // Update local state
+        setRecentNotifications(prev =>
+          prev.map(n =>
+            n._id === notification._id ? { ...n, isRead: true } : n
+          )
+        );
+        
+        // Update unread count
+        setUnreadCount(prev => Math.max(0, prev - 1));
+      }
 
-    // Close dropdown
-    setIsOpen(false);
+      // Close dropdown
+      setIsOpen(false);
 
-    // Navigate to relevant page based on notification type
-    if (notification.relatedBooking) {
-      navigate(`/bookings/${notification.relatedBooking}`);
-    } else if (notification.relatedReview) {
-      navigate(`/reviews`);
-    } else if (notification.type.includes('message')) {
-      navigate(`/messages`);
+      // Navigate to relevant page based on notification type
+      if (notification.relatedBooking) {
+        console.log('📍 Navigating to booking:', notification.relatedBooking);
+        navigate(`/customer/bookings/${notification.relatedBooking}`);
+      } else if (notification.relatedReview) {
+        console.log('📍 Navigating to reviews');
+        navigate(`/reviews`);
+      } else if (notification.type && notification.type.includes('message')) {
+        console.log('📍 Navigating to messages');
+        navigate(`/customer/messages`);
+      }
+    } catch (error) {
+      console.error('❌ Error handling notification click:', error);
     }
   };
 
@@ -105,7 +185,7 @@ const NotificationBell = () => {
         
         {/* Unread Count Badge */}
         {unreadCount > 0 && (
-          <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white ring-2 ring-white animate-pulse-badge">
+          <span className="absolute top-1 right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white ring-2 ring-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
@@ -113,7 +193,7 @@ const NotificationBell = () => {
 
       {/* Notification Dropdown */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-slide-in-top">
+        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
             <h3 className="text-sm font-semibold text-gray-900">Notifications</h3>
@@ -127,7 +207,12 @@ const NotificationBell = () => {
 
           {/* Notification List */}
           <div className="max-h-96 overflow-y-auto">
-            {recentNotifications.length === 0 ? (
+            {loading ? (
+              <div className="px-4 py-8 text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-500">Loading...</p>
+              </div>
+            ) : recentNotifications.length === 0 ? (
               <div className="px-4 py-8 text-center">
                 <Bell className="h-12 w-12 mx-auto text-gray-300 mb-2" />
                 <p className="text-sm text-gray-500">No notifications yet</p>

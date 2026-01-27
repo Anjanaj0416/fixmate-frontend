@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogOut, User, Briefcase, DollarSign, Calendar, AlertCircle, MessageCircle } from 'lucide-react';
 import AvailabilityToggle from '../../components/worker/AvailabilityToggle';
+import NotificationBell from '../../components/common/NotificationBell';
 
 /**
- * Worker Dashboard Component - UPDATED WITH AVAILABILITY + VERIFICATION TOGGLE
+ * Worker Dashboard Component
+ * ✅ UPDATED: Added NotificationBell component to header
  * ✅ Active Jobs card is clickable
  * ✅ View All Jobs button works correctly
  * ✅ Messages button in Quick Actions
- * ✅ NEW: Availability toggle that also controls verification status
+ * ✅ Availability toggle that also controls verification status
  */
 const WorkerDashboard = () => {
   const navigate = useNavigate();
@@ -159,19 +161,25 @@ const WorkerDashboard = () => {
                 Here's what's happening with your business today
               </p>
             </div>
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              Sign Out
-            </button>
+            <div className="flex items-center gap-3">
+              {/* ✅ NEW: Notification Bell */}
+              <NotificationBell />
+              
+              {/* Sign Out Button */}
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                Sign Out
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* ✅ NEW: Availability + Verification Toggle Section */}
+        {/* Availability + Verification Toggle Section */}
         <div className="mb-6">
           <AvailabilityToggle 
             initialAvailability={workerProfile?.availability ?? true}
